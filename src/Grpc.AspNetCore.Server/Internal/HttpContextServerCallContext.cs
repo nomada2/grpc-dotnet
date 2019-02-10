@@ -28,17 +28,21 @@ namespace Grpc.AspNetCore.Server.Internal
 {
     internal sealed class HttpContextServerCallContext : ServerCallContext, IDisposable
     {
+        private readonly ILogger _logger;
+
         // Override the current time for unit testing
         internal ISystemClock Clock = SystemClock.Instance;
+
         private string _peer;
         private Metadata _requestHeaders;
         private Metadata _responseTrailers;
         private DateTime _deadline;
-        private CancellationTokenSource _cts;
+        private Timer _deadlineTimer;
 
-        internal HttpContextServerCallContext(HttpContext httpContext)
+        internal HttpContextServerCallContext(HttpContext httpContext, ILogger logger)
         {
             HttpContext = httpContext;
+            _logger = logger;
         }
 
         internal HttpContext HttpContext { get; }
@@ -100,7 +104,7 @@ namespace Grpc.AspNetCore.Server.Internal
             }
         }
 
-        protected override CancellationToken CancellationTokenCore => _cts.Token;
+        protected override CancellationToken CancellationTokenCore => HttpContext.RequestAborted;
 
         protected override Metadata ResponseTrailersCore
         {
@@ -168,7 +172,8 @@ namespace Grpc.AspNetCore.Server.Internal
                 }
 
                 _deadline = Clock.UtcNow.Add(timeout);
-                _cts = new CancellationTokenSource(timeout);
+
+                _deadlineTimer = new Timer(DeadlineExceeded, timeout, timeout, Timeout.InfiniteTimeSpan);
             }
             else
             {
@@ -186,16 +191,25 @@ namespace Grpc.AspNetCore.Server.Internal
                     return timeout;
                 }
 
-                // TODO(JamesNK): Log that the bad timeout value is being ignored
-                // https://github.com/grpc/grpc/blob/da09b1fd083a80e3ebca927eb5ff6bc2cfe23cb5/src/core/ext/transport/chttp2/transport/parsing.cc#L441
+                // todo log
             }
 
             return TimeSpan.Zero;
         }
+		
+		private void DeadlineExceeded(object state)
+        {
+            DeadlineExceeded(_logger, (TimeSpan)state);
+
+            StatusCore = new Status(StatusCode.DeadlineExceeded, "Deadline Exceeded");
+
+            // TODO(JamesNK): I believe this sends a RST_STREAM with INTERNAL_ERROR. Grpc.Core sends NO_ERROR
+            HttpContext.Abort();
+        }
 
         public void Dispose()
         {
-            _cts?.Dispose();
+            _deadlineTimer?.Dispose();
         }
     }
 }

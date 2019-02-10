@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using Grpc.Core;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 
 namespace Grpc.AspNetCore.Server.Internal
 {
@@ -36,7 +37,7 @@ namespace Grpc.AspNetCore.Server.Internal
 
         private readonly DuplexStreamingServerMethod _invoker;
 
-        public DuplexStreamingServerCallHandler(Method<TRequest, TResponse> method, GrpcServiceOptions serviceOptions) : base(method, serviceOptions)
+        public DuplexStreamingServerCallHandler(Method<TRequest, TResponse> method, GrpcServiceOptions serviceOptions, ILoggerFactory loggerFactory) : base(method, serviceOptions, loggerFactory)
         {
             var handlerMethod = typeof(TService).GetMethod(Method.Name);
 
@@ -51,7 +52,7 @@ namespace Grpc.AspNetCore.Server.Internal
             // Activate the implementation type via DI.
             var activator = httpContext.RequestServices.GetRequiredService<IGrpcServiceActivator<TService>>();
             var service = activator.Create();
-            var serverCallContext = new HttpContextServerCallContext(httpContext);
+            var serverCallContext = new HttpContextServerCallContext(httpContext, Logger);
             var streamWriter = new HttpContextStreamWriter<TResponse>(serverCallContext, ServiceOptions, Method.ResponseMarshaller.Serializer);
 
             serverCallContext.Initialize();

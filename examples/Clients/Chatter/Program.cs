@@ -44,7 +44,7 @@ namespace Sample.Clients
             var channel = new Channel("localhost:50051", credentials);
             var client = new Chatter.ChatterClient(channel);
 
-            using (var chat = client.Chat())
+            using (var chat = client.Chat(deadline: DateTime.UtcNow.AddSeconds(5)))
             {
                 Console.WriteLine($"Connected as {name}. Send empty message to quit.");
 

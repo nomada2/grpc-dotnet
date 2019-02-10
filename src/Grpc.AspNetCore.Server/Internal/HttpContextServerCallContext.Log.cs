@@ -16,16 +16,25 @@
 
 #endregion
 
+using System;
+using System.Globalization;
+using System.Net.Sockets;
+using System.Threading;
+using System.Threading.Tasks;
+using Grpc.Core;
 using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Logging;
 
-namespace FunctionalTestsWebsite.Infrastructure
+namespace Grpc.AspNetCore.Server.Internal
 {
-    /// <summary>
-    /// Workaround for https://github.com/aspnet/AspNetCore/issues/6880
-    /// </summary>
-    public class TestHttpResponseTrailersFeature : IHttpResponseTrailersFeature
+    internal sealed partial class HttpContextServerCallContext
     {
-        public IHeaderDictionary Trailers { get; set; }
+        private static readonly Action<ILogger, TimeSpan, Exception> _deadlineExceeded =
+            LoggerMessage.Define<TimeSpan>(LogLevel.Debug, new EventId(1, "DeadlineExceeded"), "Request with timeout of {Timeout} has exceeded its deadline.");
+
+        public static void DeadlineExceeded(ILogger logger, TimeSpan timeout)
+        {
+            _deadlineExceeded(logger, timeout, null);
+        }
     }
 }
