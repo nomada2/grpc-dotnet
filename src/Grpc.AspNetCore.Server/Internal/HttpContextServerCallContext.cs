@@ -23,10 +23,11 @@ using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Microsoft.AspNetCore.Http;
+using Microsoft.Extensions.Logging;
 
 namespace Grpc.AspNetCore.Server.Internal
 {
-    internal sealed class HttpContextServerCallContext : ServerCallContext, IDisposable
+    internal sealed partial class HttpContextServerCallContext : ServerCallContext, IDisposable
     {
         private readonly ILogger _logger;
 
@@ -178,7 +179,6 @@ namespace Grpc.AspNetCore.Server.Internal
             else
             {
                 _deadline = DateTime.MaxValue;
-                _cts = new CancellationTokenSource();
             }
         }
 
