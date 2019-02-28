@@ -69,9 +69,7 @@ namespace Grpc.AspNetCore.FunctionalTests
 
             var responseStream = await response.Content.ReadAsStreamAsync().DefaultTimeout();
 
-            var replyTask = MessageHelpers.AssertReadMessageAsync<CounterReply>(responseStream);
-            Assert.IsTrue(replyTask.IsCompleted);
-            var reply = await replyTask.DefaultTimeout();
+            var reply = await MessageHelpers.AssertReadMessageAsync<CounterReply>(responseStream);
             Assert.AreEqual(2, reply.Count);
 
             Assert.AreEqual(StatusCode.OK.ToTrailerString(), Fixture.TrailersContainer.Trailers[GrpcProtocolConstants.StatusTrailer].Single());
@@ -221,9 +219,7 @@ namespace Grpc.AspNetCore.FunctionalTests
 
             var responseStream = await response.Content.ReadAsStreamAsync().DefaultTimeout();
 
-            var replyTask = MessageHelpers.AssertReadMessageAsync<CounterReply>(responseStream);
-            Assert.IsTrue(replyTask.IsCompleted);
-            var reply = await replyTask.DefaultTimeout();
+            var reply = await MessageHelpers.AssertReadMessageAsync<CounterReply>(responseStream);
             Assert.AreEqual(3, reply.Count);
 
             Assert.AreEqual(StatusCode.OK.ToTrailerString(), Fixture.TrailersContainer.Trailers[GrpcProtocolConstants.StatusTrailer].Single());

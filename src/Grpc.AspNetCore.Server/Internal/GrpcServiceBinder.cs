@@ -98,7 +98,7 @@ namespace Grpc.AspNetCore.Server.Internal
             if (_serviceMethodsRegistry.Methods.Count == 0)
             {
                 // Only one unimplemented service endpoint is needed for the application
-                EndpointConventionBuilders.Add(CreateUnimplementedEndpoint("{unimplementedService}/{unimplementedMethod}", "gRPC - Unimplemented service", _serverCallHandlerFactory.CreateUnimplementedService()));
+                CreateUnimplementedEndpoint("{unimplementedService}/{unimplementedMethod}", "gRPC - Unimplemented service", _serverCallHandlerFactory.CreateUnimplementedService());
             }
 
             // Return UNIMPLEMENTED status for missing method:
@@ -115,16 +115,16 @@ namespace Grpc.AspNetCore.Server.Internal
                     continue;
                 }
 
-                EndpointConventionBuilders.Add(CreateUnimplementedEndpoint(serviceName + "/{unimplementedMethod}", $"gRPC - Unimplemented method for {serviceName}", _serverCallHandlerFactory.CreateUnimplementedMethod()));
+                CreateUnimplementedEndpoint(serviceName + "/{unimplementedMethod}", $"gRPC - Unimplemented method for {serviceName}", _serverCallHandlerFactory.CreateUnimplementedMethod());
             }
 
             _serviceMethodsRegistry.Methods.AddRange(ServiceMethods);
         }
 
-        private IEndpointConventionBuilder CreateUnimplementedEndpoint(string pattern, string displayName, RequestDelegate requestDelegate)
+        private void CreateUnimplementedEndpoint(string pattern, string displayName, RequestDelegate requestDelegate)
         {
             var routePattern = RoutePatternFactory.Parse(pattern, defaults: null, new { contentType = GrpcContentTypeConstraint.Instance });
-            return _builder.Map(routePattern, displayName, requestDelegate, new HttpMethodMetadata(new[] { "POST" }));
+            _builder.Map(routePattern, displayName, requestDelegate, new HttpMethodMetadata(new[] { "POST" }));
         }
 
         private class GrpcContentTypeConstraint : IRouteConstraint
