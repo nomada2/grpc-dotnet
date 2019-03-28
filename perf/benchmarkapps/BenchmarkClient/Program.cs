@@ -18,9 +18,14 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
+using BenchmarkClient.Internal;
+using Google.Protobuf;
 using Greet;
 using Grpc.Core;
 
@@ -36,6 +41,8 @@ namespace BenchmarkClient
 
         static async Task Main(string[] args)
         {
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2Support", true);
+
             if (LogGrpc)
             {
                 Environment.SetEnvironmentVariable("GRPC_VERBOSITY", "DEBUG");
@@ -67,8 +74,9 @@ namespace BenchmarkClient
                 {
                     Log($"{id}: Starting");
 
-                    var client = new Greeter.GreeterClient(channels[id]);
                     var requests = 0;
+#if false
+                    var client = new Greeter.GreeterClient(channels[id]);
 
                     while (!cts.IsCancellationRequested)
                     {
@@ -93,6 +101,48 @@ namespace BenchmarkClient
                             }
                         }
                     }
+#else
+                    HttpClient client = new HttpClient();
+
+                    while (!cts.IsCancellationRequested)
+                    {
+                        try
+                        {
+                            var message = new HelloRequest
+                            {
+                                Name = "World"
+                            };
+                            var messageSize = message.CalculateSize();
+                            var messageBytes = new byte[messageSize];
+                            message.WriteTo(new CodedOutputStream(messageBytes));
+
+                            var data = new byte[messageSize + 5];
+                            data[0] = 0;
+                            MessageHelpers.EncodeMessageLength(messageSize, data.AsSpan(1, 4));
+                            messageBytes.CopyTo(data.AsSpan(5));
+
+                            var request = new HttpRequestMessage(HttpMethod.Post, "https://" + Target + "/Greet.Greeter/SayHello");
+                            request.Content = new StreamContent(new MemoryStream(data));
+                            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
+
+                            var response = await client.SendAsync(request);
+                            response.EnsureSuccessStatusCode();
+
+                            await response.Content.ReadAsByteArrayAsync();
+
+                            requests++;
+                        }
+                        catch (Exception ex)
+                        {
+                            Log($"{id}: Error message: {ex.Message}");
+                            if (StopOnError)
+                            {
+                                cts.Cancel();
+                                break;
+                            }
+                        }
+                    }
+#endif
 
                     channelRequests[id] = requests;
 
