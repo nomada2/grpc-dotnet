@@ -17,6 +17,7 @@
 #endregion
 
 using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace BenchmarkServer
@@ -36,6 +37,11 @@ namespace BenchmarkServer
             app.UseRouting(routes =>
             {
                 routes.MapGrpcService<GreeterService>();
+
+                routes.MapGet("/", context =>
+                {
+                    return context.Response.WriteAsync("Benchmark Server");
+                });
             });
         }
     }

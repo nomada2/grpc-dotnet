@@ -22,18 +22,22 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Runtime.InteropServices;
+using System.Security.Cryptography.X509Certificates;
 using System.Threading;
 using System.Threading.Tasks;
 using BenchmarkClient.Internal;
+using Common;
 using Google.Protobuf;
 using Greet;
 using Grpc.Core;
+using Grpc.NetCore.HttpClient;
 
 namespace BenchmarkClient
 {
     class Program
     {
-        private const int Connections = 2;
+        private const int Connections = 1;
         private const int DurationSeconds = 20;
         private const string Target = "127.0.0.1:50051";
         private readonly static bool StopOnError = false;
@@ -102,6 +106,8 @@ namespace BenchmarkClient
                         }
                     }
 #else
+                    AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2Support", true);
+
                     HttpClient client = new HttpClient();
 
                     while (!cts.IsCancellationRequested)
@@ -121,14 +127,22 @@ namespace BenchmarkClient
                             MessageHelpers.EncodeMessageLength(messageSize, data.AsSpan(1, 4));
                             messageBytes.CopyTo(data.AsSpan(5));
 
-                            var request = new HttpRequestMessage(HttpMethod.Post, "https://" + Target + "/Greet.Greeter/SayHello");
-                            request.Content = new StreamContent(new MemoryStream(data));
-                            request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
+                            //var request = new HttpRequestMessage(HttpMethod.Post, "https://" + Target + "/Greet.Greeter/SayHello");
+                            //request.Version = new Version(2, 0);
+                            //request.Content = new StreamContent(new MemoryStream(data));
+                            //request.Content.Headers.ContentType = new MediaTypeHeaderValue("application/grpc");
 
-                            var response = await client.SendAsync(request);
-                            response.EnsureSuccessStatusCode();
+                            var certificate = RuntimeInformation.IsOSPlatform(OSPlatform.OSX) ? null : new X509Certificate2(Path.Combine(Resources.CertDir, "client.crt"));
 
-                            await response.Content.ReadAsByteArrayAsync();
+                            var c = GrpcClientFactory.Create<Greeter.GreeterClient>("https://" + Target, null);
+                            var r = await c.SayHelloAsync(message);
+
+
+
+                            //var response = await client.SendAsync(request);
+                            //response.EnsureSuccessStatusCode();
+
+                            //await response.Content.ReadAsByteArrayAsync();
 
                             requests++;
                         }
@@ -173,7 +187,8 @@ namespace BenchmarkClient
                 var channel = new Channel(Target, ChannelCredentials.Insecure);
 
                 Log($"Connecting channel '{i}'");
-                await channel.ConnectAsync();
+                await Task.Delay(0);
+                //await channel.ConnectAsync();
 
                 channels.Add(channel);
                 requests.Add(0);

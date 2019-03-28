@@ -16,7 +16,9 @@
     <None Remove="@(Protobuf)" />
     <Content Include="@(Protobuf)" LinkBase="" />
 
-    <Compile Include="$(MSBuildThisFileDirectory)..\..\Shared\*.cs" />
+    <Compile Include="$(MSBuildThisFileDirectory)..\..\..\examples\Shared\Resources.cs" />
+
+    <ProjectReference Include="..\..\..\src\Grpc.NetCore.HttpClient\Grpc.NetCore.HttpClient.csproj" />
 
     <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufPackageVersion)" />
     <PackageReference Include="Grpc.Core" Version="$(GrpcCorePackageVersion)" />
