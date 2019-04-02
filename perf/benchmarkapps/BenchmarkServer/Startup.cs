@@ -46,6 +46,14 @@ namespace BenchmarkServer
             {
                 endpoints.MapGrpcService<GreeterService>();
 
+
+                endpoints.MapControllers();
+                
+                endpoints.MapGet("/", context =>
+                {
+                    return context.Response.WriteAsync("Benchmark Server");
+                });
+
                 endpoints.MapPost("/raw/greeter", async context =>
                 {
                     MemoryStream ms = new MemoryStream();
@@ -66,8 +74,6 @@ namespace BenchmarkServer
                     ms.Seek(0, SeekOrigin.Begin);
                     await ms.CopyToAsync(context.Response.Body);
                 });
-
-                endpoints.MapControllers();
             });
         }
     }
