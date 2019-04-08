@@ -86,7 +86,7 @@ namespace BenchmarkServer
                             listenOptions.UseHttps(Resources.ServerPFXPath, "1111");
                         }
 
-                        listenOptions.Protocols = HttpProtocols.Http2;
+                        listenOptions.Protocols = HttpProtocols.Http1;
                     });
                 });
 
