@@ -47,6 +47,21 @@ namespace Grpc.AspNetCore.Server.Internal
             return new Status(StatusCode.Unimplemented, $"Unsupported grpc-encoding value '{unsupportedEncoding}'. Supported encodings: {string.Join(", ", supportedEncodings)}");
         }
 
+        public static Task FastFlushAsync(this PipeWriter pipeWriter)
+        {
+            var valueTask = pipeWriter.FlushAsync();
+
+            // Avoids allocating a task is the flush completed immediately
+            if (valueTask.IsCompletedSuccessfully)
+            {
+                // We do this to reset the underlying value task (which happens in GetResult())
+                valueTask.GetAwaiter().GetResult();
+                return Task.CompletedTask;
+            }
+
+            return valueTask.AsTask();
+        }
+
         public static Task WriteMessageAsync<TResponse>(this PipeWriter pipeWriter, TResponse response, HttpContextServerCallContext serverCallContext, Func<TResponse, byte[]> serializer)
         {
             var responsePayload = serializer(response);
@@ -106,16 +121,7 @@ namespace Grpc.AspNetCore.Server.Internal
 
             if (flush)
             {
-                var valueTask = pipeWriter.FlushAsync();
-
-                if (valueTask.IsCompletedSuccessfully)
-                {
-                    // We do this to reset the underlying value task (which happens in GetResult())
-                    valueTask.GetAwaiter().GetResult();
-                    return Task.CompletedTask;
-                }
-
-                return valueTask.AsTask();
+                return pipeWriter.FastFlushAsync();
             }
 
             return Task.CompletedTask;

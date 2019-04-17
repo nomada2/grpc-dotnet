@@ -206,7 +206,7 @@ namespace Grpc.AspNetCore.Server.Internal
                 }
             }
 
-            return HttpContext.Response.Body.FlushAsync();
+            return HttpContext.Response.BodyWriter.FastFlushAsync();
         }
 
         public void Initialize()
