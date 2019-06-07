@@ -541,7 +541,7 @@ namespace InteropTestsClient
         {
             Console.WriteLine("running timeout_on_sleeping_server");
 
-            var deadline = DateTime.UtcNow.AddMilliseconds(1);
+            var deadline = DateTime.UtcNow.AddMilliseconds(100);
             using (var call = client.FullDuplexCall(deadline: deadline))
             {
                 try

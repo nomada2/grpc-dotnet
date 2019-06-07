@@ -416,7 +416,7 @@ namespace Grpc.Net.Client.Internal
                     // Deadline timer will cancel the call CTS
                     // Start timer after reader/writer have been created, otherwise a zero length deadline could cancel
                     // the call CTS before they are created and leave them in a non-canceled state
-                    _deadlineTimer = new Timer(DeadlineExceeded, null, _timeout.Value, Timeout.InfiniteTimeSpan);
+                    _deadlineTimer = new Timer(DeadlineExceeded, null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
                 }
 
                 SendTask = SendAsync(client, message);
