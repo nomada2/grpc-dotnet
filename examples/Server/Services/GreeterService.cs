@@ -44,7 +44,7 @@ class GreeterService : Greeter.GreeterBase, IDisposable
         _logger.LogInformation($"Connection id: {httpContext.Connection.Id}");
 
         var i = 0;
-        while (!context.CancellationToken.IsCancellationRequested)
+        while (true)
         {
             var message = $"How are you {request.Name}? {++i}";
             _logger.LogInformation($"Sending greeting {message}.");
@@ -53,6 +53,11 @@ class GreeterService : Greeter.GreeterBase, IDisposable
 
             // Gotta look busy
             await Task.Delay(1000);
+
+            if (i > 2)
+            {
+                break;
+            }
         }
     }
 

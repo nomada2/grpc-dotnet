@@ -20,6 +20,8 @@ using System;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography.X509Certificates;
+using System.Threading;
+using System.Threading.Tasks;
 using Count;
 using Greet;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -27,6 +29,11 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.IdentityModel.Tokens;
+using OpenTelemetry.Collector.AspNetCore;
+using OpenTelemetry.Collector.Dependencies;
+using OpenTelemetry.Exporter.Zipkin;
+using OpenTelemetry.Trace;
+using OpenTelemetry.Trace.Sampler;
 using Server.Interceptors;
 
 namespace GRPCServer
@@ -57,6 +64,15 @@ namespace GRPCServer
             services.AddSingleton<IncrementingCounter>();
             services.AddSingleton<MailQueueRepository>();
             services.AddSingleton<TicketRepository>();
+
+            services.AddSingleton<ITracer>(Tracing.Tracer);
+            services.AddSingleton<ISampler>(Samplers.AlwaysSample);
+            //services.AddSingleton<IPropagationComponent>(new DefaultPropagationComponent());
+
+            services.AddSingleton<RequestsCollectorOptions>(new RequestsCollectorOptions());
+            services.AddSingleton<RequestsCollector>();
+            services.AddSingleton<DependenciesCollectorOptions>(new DependenciesCollectorOptions());
+            services.AddSingleton<DependenciesCollector>();
 
             // These clients will call back to the server
             services
@@ -109,6 +125,26 @@ namespace GRPCServer
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
         public void Configure(IApplicationBuilder app)
         {
+            var collector = app.ApplicationServices.GetService<RequestsCollector>();
+            var depCollector = app.ApplicationServices.GetService<DependenciesCollector>();
+
+            var exporter = new ZipkinTraceExporter(
+                  new ZipkinTraceExporterOptions()
+                  {
+                      Endpoint = new Uri("http://localhost:9411/api/v2/spans"),
+                      ServiceName = typeof(Program).Assembly.GetName().Name,
+                  },
+                  Tracing.ExportComponent);
+            exporter.Start();
+
+            var span = Tracing.Tracer
+            .SpanBuilder("incoming request")
+            .SetSampler(Samplers.AlwaysSample)
+            .StartSpan();
+
+            Thread.Sleep(TimeSpan.FromSeconds(1));
+            span.End();
+
             app.UseRouting();
 
             app.UseAuthentication();

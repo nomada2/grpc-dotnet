@@ -18,6 +18,11 @@
 
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" Version="$(MicrosoftAspNetCorePackageVersion)" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="$(MicrosoftAspNetCorePackageVersion)" />
+
+    <PackageReference Include="OpenTelemetry" Version="0.1.0-alpha-84176" />
+    <PackageReference Include="OpenTelemetry.Collector.AspNetCore" Version="0.1.0-alpha-84176" />
+    <PackageReference Include="OpenTelemetry.Collector.Dependencies" Version="0.1.0-alpha-84176" />
+    <PackageReference Include="OpenTelemetry.Exporter.Zipkin" Version="0.1.0-alpha-84176" />
   </ItemGroup>
 
 </Project>
