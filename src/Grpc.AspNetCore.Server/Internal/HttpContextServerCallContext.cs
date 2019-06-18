@@ -43,10 +43,10 @@ namespace Grpc.AspNetCore.Server.Internal
         private Metadata? _responseTrailers;
         private DateTime _deadline;
         private CancellationTokenSource? _deadlineCts;
+        private CancellationTokenSource? _linkedCts;
         private SemaphoreSlim? _deadlineLock;
         private Status _status;
         private AuthContext? _authContext;
-        private CancellationTokenRegistration _requestAbortedRegistration;
         // Internal for tests
         internal bool _disposed;
 
@@ -199,7 +199,7 @@ namespace Grpc.AspNetCore.Server.Internal
             }
         }
 
-        protected override CancellationToken CancellationTokenCore => _deadlineCts?.Token ?? HttpContext.RequestAborted;
+        protected override CancellationToken CancellationTokenCore => _linkedCts?.Token ?? HttpContext.RequestAborted;
 
         protected override Metadata ResponseTrailersCore
         {
@@ -352,7 +352,7 @@ namespace Grpc.AspNetCore.Server.Internal
                 _deadlineCts = new CancellationTokenSource(timeout);
                 _deadlineCts.Token.Register(DeadlineExceeded);
 
-                _requestAbortedRegistration = HttpContext.RequestAborted.Register(RequestAborted);
+                _linkedCts = CancellationTokenSource.CreateLinkedTokenSource(HttpContext.RequestAborted, _deadlineCts.Token);
             }
             else
             {
@@ -372,11 +372,6 @@ namespace Grpc.AspNetCore.Server.Internal
             }
 
             HttpContext.Response.Headers.Append(GrpcProtocolConstants.MessageEncodingHeader, ResponseGrpcEncoding);
-        }
-
-        private void RequestAborted()
-        {
-            _deadlineCts?.Cancel();
         }
 
         private TimeSpan GetTimeout()
@@ -402,13 +397,6 @@ namespace Grpc.AspNetCore.Server.Internal
         {
             // Deadline could be raised after call has been disposed
             if (_disposed)
-            {
-                return;
-            }
-
-            // Request abort uses the same cancellation token
-            // Don't run deadline logic if the request has already been aborted
-            if (HttpContext.RequestAborted.IsCancellationRequested)
             {
                 return;
             }
@@ -459,7 +447,7 @@ namespace Grpc.AspNetCore.Server.Internal
         {
             _disposed = true;
             _deadlineCts?.Dispose();
-            _requestAbortedRegistration.Dispose();
+            _linkedCts?.Dispose();
         }
 
         internal string? GetRequestGrpcEncoding()
