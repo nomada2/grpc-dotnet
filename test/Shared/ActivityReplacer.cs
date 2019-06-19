@@ -1,5 +1,4 @@
-﻿
-#region Copyright notice and license
+﻿#region Copyright notice and license
 
 // Copyright 2019 The gRPC Authors
 //
@@ -17,13 +16,25 @@
 
 #endregion
 
-using System.Threading.Tasks;
-using Microsoft.AspNetCore.Http;
+using System;
+using System.Diagnostics;
 
-namespace Grpc.AspNetCore.Server.Internal
+namespace Grpc.Tests.Shared
 {
-    internal interface IServerCallHandler
+    public class ActivityReplacer : IDisposable
     {
-        Task HandleCallAsync(HttpContext httpContext);
+        private readonly Activity _activity;
+
+        public ActivityReplacer()
+        {
+            _activity = new Activity("Test");
+            _activity.Start();
+        }
+
+        public void Dispose()
+        {
+            Debug.Assert(Activity.Current == _activity);
+            _activity.Stop();
+        }
     }
 }

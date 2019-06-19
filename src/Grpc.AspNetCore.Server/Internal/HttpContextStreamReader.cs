@@ -76,6 +76,7 @@ namespace Grpc.AspNetCore.Server.Internal
             }
 
             Current = _deserializer(requestPayload);
+            GrpcEventSource.Log.MessageReceived();
             return true;
         }
     }

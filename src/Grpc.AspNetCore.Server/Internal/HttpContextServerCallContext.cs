@@ -34,7 +34,7 @@ namespace Grpc.AspNetCore.Server.Internal
     {
         private static readonly AuthContext UnauthenticatedContext = new AuthContext(null, new Dictionary<string, List<AuthProperty>>());
         private readonly ILogger _logger;
-
+        private readonly DiagnosticSource _diagnosticSource;
         private string? _peer;
         private Metadata? _requestHeaders;
         private Metadata? _responseTrailers;
@@ -43,11 +43,12 @@ namespace Grpc.AspNetCore.Server.Internal
         // Internal for tests
         internal ServerCallDeadlineManager? DeadlineManager;
 
-        internal HttpContextServerCallContext(HttpContext httpContext, GrpcServiceOptions serviceOptions, ILogger logger)
+        internal HttpContextServerCallContext(HttpContext httpContext, GrpcServiceOptions serviceOptions, ILogger logger, DiagnosticSource diagnosticSource)
         {
             HttpContext = httpContext;
             ServiceOptions = serviceOptions;
             _logger = logger;
+            _diagnosticSource = diagnosticSource;
         }
 
         internal HttpContext HttpContext { get; }
@@ -56,9 +57,9 @@ namespace Grpc.AspNetCore.Server.Internal
 
         internal bool HasResponseTrailers => _responseTrailers != null;
 
-        protected override string? MethodCore => HttpContext.Request.Path.Value;
+        protected override string MethodCore => HttpContext.Request.Path.Value;
 
-        protected override string? HostCore => HttpContext.Request.Host.Value;
+        protected override string HostCore => HttpContext.Request.Host.Value;
 
         protected override string? PeerCore
         {
@@ -170,6 +171,8 @@ namespace Grpc.AspNetCore.Server.Internal
                 HttpContext.Response.ConsolidateTrailers(this);
             }
 
+            LogCallEnd();
+
             DeadlineManager?.SetCallComplete();
         }
 
@@ -254,7 +257,24 @@ namespace Grpc.AspNetCore.Server.Internal
                 HttpContext.Response.ConsolidateTrailers(this);
             }
 
+            LogCallEnd();
+
             DeadlineManager?.SetCallComplete();
+        }
+
+        private void LogCallEnd()
+        {
+            var currentActivity = Activity.Current;
+            if (currentActivity != null)
+            {
+                currentActivity.AddTag("grpc.status_code", _status.StatusCode.ToTrailerString());
+                RaiseActivityChanged(currentActivity);
+            }
+            if (_status.StatusCode != StatusCode.OK)
+            {
+                GrpcEventSource.Log.CallFailed(_status.StatusCode);
+            }
+            GrpcEventSource.Log.CallStop();
         }
 
         protected override WriteOptions? WriteOptionsCore { get; set; }
@@ -322,6 +342,15 @@ namespace Grpc.AspNetCore.Server.Internal
         // Clock is for testing
         public void Initialize(ISystemClock? clock = null)
         {
+            var currentActivity = Activity.Current;
+            if (currentActivity != null)
+            {
+                Activity.Current.AddTag("grpc.method", MethodCore);
+                RaiseActivityChanged(currentActivity);
+            }
+
+            GrpcEventSource.Log.CallStart(MethodCore);
+
             var timeout = GetTimeout();
 
             if (timeout != TimeSpan.Zero)
@@ -342,6 +371,22 @@ namespace Grpc.AspNetCore.Server.Internal
             }
 
             HttpContext.Response.Headers.Append(GrpcProtocolConstants.MessageEncodingHeader, ResponseGrpcEncoding);
+        }
+
+        private void RaiseActivityChanged(Activity currentActivity)
+        {
+            const string ChangeSuffix = ".Change";
+            const string AspNetCoreHostingActivityName = "Microsoft.AspNetCore.Hosting.HttpRequestIn";
+            const string AspNetCoreHostingActivityChange = "Microsoft.AspNetCore.Hosting.HttpRequestIn" + ChangeSuffix;
+
+            // If the current activity is the ASP.NET Core hosting activity then use const string.
+            // This optimization avoids allocation is the most common use case.
+            var name = string.Equals(currentActivity.OperationName, AspNetCoreHostingActivityName, StringComparison.Ordinal)
+                ? AspNetCoreHostingActivityChange
+                : currentActivity.OperationName + ChangeSuffix;
+
+            // Notify diagnostic listener that activity has been changed
+            _diagnosticSource.Write(name, null);
         }
 
         private TimeSpan GetTimeout()
@@ -367,6 +412,7 @@ namespace Grpc.AspNetCore.Server.Internal
             try
             {
                 Log.DeadlineExceeded(_logger, GetTimeout());
+                GrpcEventSource.Log.CallDeadlineExceeded();
 
                 var status = new Status(StatusCode.DeadlineExceeded, "Deadline Exceeded");
 
