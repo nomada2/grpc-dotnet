@@ -132,7 +132,7 @@ namespace Grpc.Net.Client
             }
         }
 
-        public static async Task WriteMessage<TMessage>(this Stream stream, ILogger logger, TMessage message, Func<TMessage, byte[]> serializer, CancellationToken cancellationToken)
+        public static async Task WriteMessageAsync<TMessage>(this Stream stream, ILogger logger, TMessage message, Func<TMessage, byte[]> serializer, CancellationToken cancellationToken)
         {
             try
             {

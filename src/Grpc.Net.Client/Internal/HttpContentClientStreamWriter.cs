@@ -116,10 +116,11 @@ namespace Grpc.Net.Client.Internal
         {
             try
             {
-                    // Wait until the client stream has started
-                    var writeStream = await _writeStreamTask.ConfigureAwait(false);
+                // Wait until the client stream has started
+                var writeStream = await _writeStreamTask.ConfigureAwait(false);
 
-                    await writeStream.WriteMessage<TRequest>(_call.Logger, message, _call.Method.RequestMarshaller.Serializer, _call.CancellationToken).ConfigureAwait(false);
+                await writeStream.WriteMessageAsync<TRequest>(_call.Logger, message, _call.Method.RequestMarshaller.Serializer, _call.CancellationToken).ConfigureAwait(false);
+                GrpcEventSource.Log.MessageSent();
             }
             catch (TaskCanceledException)
             {
