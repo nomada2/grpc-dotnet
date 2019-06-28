@@ -483,7 +483,7 @@ namespace Grpc.Net.Client.Internal
                 }
                 GrpcEventSource.Log.CallStop();
 
-                // Activity needs to be stopped in the same execution context
+                // Activity needs to be stopped in the same execution context it was started
                 if (activity != null)
                 {
                     var statusText = statusCode.ToString("D");
@@ -494,6 +494,13 @@ namespace Grpc.Net.Client.Internal
 
                     if (diagnosticSourceEnabled)
                     {
+                        // Stop sets the end time if it was unset, but we want it set before we issue the write
+                        // so we do it now.   
+                        if (activity.Duration == TimeSpan.Zero)
+                        {
+                            activity.SetEndTime(DateTime.UtcNow);
+                        }
+
                         GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, HttpResponse);
                     }
 

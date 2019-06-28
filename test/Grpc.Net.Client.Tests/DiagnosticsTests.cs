@@ -101,6 +101,74 @@ namespace Grpc.Net.Client.Tests
             Assert.AreEqual(responseMessage, result[1].Value);
         }
 
+        [Test]
+        public void DiagnosticListener_MakeCall_ActivityHasNameAndDuration()
+        {
+            // Arrange
+            HttpRequestMessage? requestMessage = null;
+            HttpResponseMessage? responseMessage = null;
+            var httpClient = TestHelpers.CreateTestClient(async request =>
+            {
+                requestMessage = request;
+
+                var streamContent = await TestHelpers.CreateResponseContent(new HelloReply()).DefaultTimeout();
+                responseMessage = ResponseUtils.CreateResponse(HttpStatusCode.OK, streamContent, grpcStatusCode: StatusCode.Aborted);
+                responseMessage.TrailingHeaders.Add(GrpcProtocolConstants.MessageTrailer, "value");
+                return responseMessage;
+            });
+            var invoker = HttpClientCallInvokerFactory.Create(httpClient);
+
+            string? activityName = null;
+            TimeSpan? activityDurationOnStop = null;
+            Action<KeyValuePair<string, object>> onDiagnosticMessage = (m) =>
+            {
+                if (m.Key == GrpcDiagnostics.ActivityStopKey)
+                {
+                    activityName = Activity.Current.OperationName;
+                    activityDurationOnStop = Activity.Current.Duration;
+                }
+            };
+
+            // Act
+            using (GrpcDiagnostics.DiagnosticListener.Subscribe(new ActionObserver<KeyValuePair<string, object>>(onDiagnosticMessage)))
+            {
+                var c = invoker.AsyncDuplexStreamingCall<HelloRequest, HelloReply>(TestHelpers.ServiceMethod, string.Empty, new CallOptions());
+                c.Dispose();
+            }
+
+            // Assert
+            Assert.AreEqual(GrpcDiagnostics.ActivityName, activityName);
+            Assert.IsNotNull(activityDurationOnStop);
+            Assert.AreNotEqual(TimeSpan.Zero, activityDurationOnStop);
+        }
+
+        internal class ActionObserver<T> : IObserver<T>
+        {
+            private readonly Action<T> _action;
+
+            public ActionObserver(Action<T> action)
+            {
+                _action = action;
+            }
+
+            public bool Completed { get; private set; }
+
+            public void OnCompleted()
+            {
+                Completed = true;
+            }
+
+            public void OnError(Exception error)
+            {
+                throw new Exception("Observer error", error);
+            }
+
+            public void OnNext(T value)
+            {
+                _action(value);
+            }
+        }
+
         internal class ObserverToList<T> : IObserver<T>
         {
             public ObserverToList(List<T> output, Predicate<T>? filter = null, string? name = null)
