@@ -96,9 +96,10 @@ namespace Grpc.Net.Client.Tests
             // Assert
             Assert.AreEqual(2, result.Count);
             Assert.AreEqual(GrpcDiagnostics.ActivityStartKey, result[0].Key);
-            Assert.AreEqual(requestMessage, result[0].Value);
+            Assert.AreEqual(requestMessage, GetValueFromAnonymousType<HttpRequestMessage>(result[0].Value, "Request"));
             Assert.AreEqual(GrpcDiagnostics.ActivityStopKey, result[1].Key);
-            Assert.AreEqual(responseMessage, result[1].Value);
+            Assert.AreEqual(requestMessage, GetValueFromAnonymousType<HttpRequestMessage>(result[1].Value, "Request"));
+            Assert.AreEqual(responseMessage, GetValueFromAnonymousType<HttpResponseMessage>(result[1].Value, "Response"));
         }
 
         [Test]
@@ -140,6 +141,13 @@ namespace Grpc.Net.Client.Tests
             Assert.AreEqual(GrpcDiagnostics.ActivityName, activityName);
             Assert.IsNotNull(activityDurationOnStop);
             Assert.AreNotEqual(TimeSpan.Zero, activityDurationOnStop);
+        }
+
+        private static T GetValueFromAnonymousType<T>(object dataitem, string itemkey)
+        {
+            var type = dataitem.GetType();
+            T itemvalue = (T)type.GetProperty(itemkey)!.GetValue(dataitem, null)!;
+            return itemvalue;
         }
 
         internal class ActionObserver<T> : IObserver<T>
