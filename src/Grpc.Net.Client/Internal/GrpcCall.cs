@@ -467,7 +467,7 @@ namespace Grpc.Net.Client.Internal
 
                     if (diagnosticSourceEnabled)
                     {
-                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStartKey, request);
+                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStartKey, new { Request = request });
                     }
                 }
 
@@ -501,7 +501,7 @@ namespace Grpc.Net.Client.Internal
                             activity.SetEndTime(DateTime.UtcNow);
                         }
 
-                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, HttpResponse);
+                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, new { Request = request, Response = HttpResponse });
                     }
 
                     activity.Stop();
