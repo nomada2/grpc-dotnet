@@ -29,8 +29,6 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
 
         public GrpcTestFixture(Action<IServiceCollection>? initialConfigureServices = null)
         {
-            LoggerFactory = new LoggerFactory();
-
             Action<IServiceCollection> configureServices = services =>
             {
                 // Registers a service for tests to add new methods
@@ -54,7 +52,6 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
             Client.BaseAddress = new Uri(_server.Url!);
         }
 
-        public ILoggerFactory LoggerFactory { get; }
         public DynamicGrpcServiceRegistry DynamicGrpc { get; }
 
         public HttpClient Client { get; }

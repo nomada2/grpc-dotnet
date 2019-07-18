@@ -22,6 +22,7 @@ using System.Threading;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using NUnit.Framework;
+using NUnit.Framework.Interfaces;
 
 namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
 {
@@ -94,12 +95,25 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
 
         public void Dispose()
         {
-            _logger.LogInformation($"Finishing {GetTestName()}");
+            // This will verify only expected errors were logged on the server for the previous test.
+            Scope.Dispose();
+
+            var testContext = TestContext.CurrentContext;
+            if (testContext.Result.Outcome.Status == TestStatus.Failed)
+            {
+                var message = testContext.Result.Message;
+                if (!string.IsNullOrEmpty(testContext.Result.StackTrace))
+                {
+                    message += Environment.NewLine + testContext.Result.StackTrace;
+                }
+
+                _logger.LogError(message);
+            }
+
+            _logger.LogInformation($"{testContext.Result.Outcome.Status} {GetTestName()}");
 
             _serviceProvider.Dispose();
 
-            // This will verify only expected errors were logged on the server for the previous test.
-            Scope.Dispose();
         }
 
         private string GetTestName()
