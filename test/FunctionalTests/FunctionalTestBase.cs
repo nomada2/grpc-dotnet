@@ -30,10 +30,13 @@ namespace Grpc.AspNetCore.FunctionalTests
     public class FunctionalTestBase
     {
         private GrpcTestContext? _testContext;
+        private ILogger? _logger;
 
         protected GrpcTestFixture<FunctionalTestsWebsite.Startup> Fixture { get; private set; } = default!;
 
         protected ILoggerFactory LoggerFactory => _testContext!.LoggerFactory;
+
+        protected ILogger Logger => _logger ??= _testContext!.LoggerFactory.CreateLogger<FunctionalTestBase>();
 
         protected virtual void ConfigureServices(IServiceCollection services) { }
 
@@ -61,6 +64,7 @@ namespace Grpc.AspNetCore.FunctionalTests
         {
             if (_testContext != null)
             {
+                _logger = null;
                 Fixture.ServerLogged -= _testContext.ServerFixtureOnServerLogged;
                 _testContext.Dispose();
             }

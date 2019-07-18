@@ -23,6 +23,7 @@ using System.Threading.Tasks;
 using Google.Protobuf;
 using Grpc.Net.Client;
 using Grpc.Tests.Shared;
+using Microsoft.Extensions.Logging;
 using NUnit.Framework;
 using Streaming;
 using Unimplemented;
@@ -98,21 +99,27 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
             // Arrange
             var client = GrpcClient.Create<UnimplementedService.UnimplementedServiceClient>(Fixture.Client, LoggerFactory);
 
-            // Act
-            var call = client.DuplexData();
-
-            // Response will only be headers so the call is "done" on the server side
-            await call.ResponseHeadersAsync.DefaultTimeout();
-
-            await call.RequestStream.WriteAsync(new UnimplementeDataMessage
+            for (int i = 0; i < 1000; i++)
             {
-                Data = ByteString.CopyFrom(new byte[1024 * 64])
-            }).DefaultTimeout();
+                Logger.LogInformation($"ITERATION {i}");
 
-            await call.RequestStream.WriteAsync(new UnimplementeDataMessage
-            {
-                Data = ByteString.CopyFrom(new byte[1024 * 64])
-            }).DefaultTimeout();
+                // Act
+                var call = client.DuplexData();
+
+                // Response will only be headers so the call is "done" on the server side
+                await call.ResponseHeadersAsync.DefaultTimeout();
+                await call.RequestStream.CompleteAsync();
+            }
+
+            //await call.RequestStream.WriteAsync(new UnimplementeDataMessage
+            //{
+            //    Data = ByteString.CopyFrom(new byte[1024 * 64])
+            //}).DefaultTimeout();
+
+            //await call.RequestStream.WriteAsync(new UnimplementeDataMessage
+            //{
+            //    Data = ByteString.CopyFrom(new byte[1024 * 64])
+            //}).DefaultTimeout();
         }
     }
 }

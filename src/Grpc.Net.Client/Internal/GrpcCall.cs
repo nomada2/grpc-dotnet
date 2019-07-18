@@ -275,7 +275,10 @@ namespace Grpc.Net.Client.Internal
             {
                 using (StartScope())
                 {
+                    Logger.LogInformation("Awaiting send task");
                     await SendTask.ConfigureAwait(false);
+
+                    Logger.LogInformation("Send task finished");
                     Debug.Assert(HttpResponse != null);
 
                     // The task of this method is cached so there is no need to cache the headers here
@@ -546,7 +549,9 @@ namespace Grpc.Net.Client.Internal
 
             try
             {
+                Logger.LogInformation("Calling HttpClient.SendAsync");
                 HttpResponse = await client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _callCts.Token).ConfigureAwait(false);
+                Logger.LogInformation("Finished HttpClient.SendAsync");
             }
             catch (Exception ex)
             {
@@ -555,6 +560,7 @@ namespace Grpc.Net.Client.Internal
             }
 
             ValidateHeaders();
+            Logger.LogInformation("Finishing SendAsync");
         }
 
         private async Task ReadCredentialMetadata(HttpClient client, HttpRequestMessage message, CallCredentials credentials)
