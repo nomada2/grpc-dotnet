@@ -110,7 +110,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
 
             await call.RequestStream.CompleteAsync().DefaultTimeout();
 
-            var response = await call.ResponseAsync.TimeoutAfter(TimeSpan.FromSeconds(100));
+            var response = await call.ResponseAsync.DefaultTimeout();
 
             // Assert
             Assert.AreEqual(total, response.Size);
