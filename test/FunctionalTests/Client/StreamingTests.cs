@@ -75,13 +75,12 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
         public async Task ClientStream_SendLargeFileBatchedAndRecieveLargeFileBatched_Success()
         {
             // Arrange
-            var total = 1024 * 1024 * 1024;
+            var total = 1024 * 1024 * 64; // 64 MB
             var data = new byte[1024 * 64]; // 64 KB
-            var client = GrpcClient.Create<StreamService.StreamServiceClient>(Fixture.Client);
+            var client = GrpcClient.Create<StreamService.StreamServiceClient>(Fixture.Client, LoggerFactory);
             var dataMessage = new DataMessage
             {
-                Data = ByteString.CopyFrom(data),
-                ServerDelayMilliseconds = 10
+                Data = ByteString.CopyFrom(data)
             };
 
             // Act
@@ -111,7 +110,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
 
             await call.RequestStream.CompleteAsync().DefaultTimeout();
 
-            var response = await call.ResponseAsync.DefaultTimeout();
+            var response = await call.ResponseAsync.TimeoutAfter(TimeSpan.FromSeconds(100));
 
             // Assert
             Assert.AreEqual(total, response.Size);
