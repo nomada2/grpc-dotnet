@@ -16,7 +16,9 @@
 
 #endregion
 
+using System.Collections.Generic;
 using System.IO;
+using System.Net.Http;
 using System.Threading.Tasks;
 using FunctionalTestsWebsite.Services;
 using Greet;
@@ -60,16 +62,29 @@ namespace Grpc.AspNetCore.FunctionalTests.Server
                 Name = "World" + new string('!', 64 * 1024)
             };
 
-            var ms = new MemoryStream();
-            MessageHelpers.WriteMessage(ms, requestMessage);
-
             // Act
-            var response = await Fixture.Client.PostAsync(
-                "Greet.Greeter/SayHello",
-                new GrpcStreamContent(ms)).DefaultTimeout();
+            var tasks = new List<Task>();
+            for (var i = 0; i < 20; i++)
+            {
+                tasks.Add(Task.Run(async () =>
+                {
+                    for (int i = 0; i < 1000; i++)
+                    {
+                        var ms = new MemoryStream();
+                        MessageHelpers.WriteMessage(ms, requestMessage);
 
-            // Assert
-            response.AssertTrailerStatus(StatusCode.ResourceExhausted, "Received message exceeds the maximum configured message size.");
+                        //using var client = Fixture.CreateClient();
+                        var response = await Fixture.Client.PostAsync(
+                            "Greet.Greeter/SayHello",
+                            new GrpcStreamContent(ms)).DefaultTimeout();
+
+                        // Assert
+                        response.AssertTrailerStatus(StatusCode.ResourceExhausted, "Received message exceeds the maximum configured message size.");
+                    }
+                }));
+            }
+
+            await Task.WhenAll(tasks);
         }
 
         [Test]
