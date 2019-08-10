@@ -17,6 +17,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading;
@@ -180,25 +181,35 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
 
             // Arrange
             var client = new UnimplementedService.UnimplementedServiceClient(Channel);
-
-            // This is in a loop to verify a hang that existed in HttpClient when the request is not read to completion
-            // https://github.com/dotnet/corefx/issues/39586
-            for (var i = 0; i < 1000; i++)
+            var tasks = new List<Task>();
+            for (int j = 0; j < 20; j++)
             {
-                // Act
-                var call = client.DuplexData();
+                var t = Task.Run(async () =>
+                {
+                    // This is in a loop to verify a hang that existed in HttpClient when the request is not read to completion
+                    // https://github.com/dotnet/corefx/issues/39586
+                    for (var i = 0; i < 10000; i++)
+                    {
+                        // Act
+                        var call = client.DuplexData();
 
-                // Response will only be headers so the call is "done" on the server side
-                await call.ResponseHeadersAsync.DefaultTimeout();
-                await call.RequestStream.CompleteAsync();
+                        // Response will only be headers so the call is "done" on the server side
+                        await call.ResponseHeadersAsync.DefaultTimeout();
+                        await call.RequestStream.CompleteAsync();
 
-                var ex = await ExceptionAssert.ThrowsAsync<RpcException>(() => call.ResponseStream.MoveNext());
-                var status = call.GetStatus();
+                        var ex = await ExceptionAssert.ThrowsAsync<RpcException>(() => call.ResponseStream.MoveNext());
+                        var status = call.GetStatus();
 
-                // Assert
-                Assert.AreEqual(StatusCode.Unimplemented, ex.StatusCode);
-                Assert.AreEqual(StatusCode.Unimplemented, status.StatusCode);
+                        // Assert
+                        Assert.AreEqual(StatusCode.Unimplemented, ex.StatusCode);
+                        Assert.AreEqual(StatusCode.Unimplemented, status.StatusCode);
+                    }
+                });
+
+                tasks.Add(t);
             }
+
+            await Task.WhenAll(tasks);
         }
     }
 }
