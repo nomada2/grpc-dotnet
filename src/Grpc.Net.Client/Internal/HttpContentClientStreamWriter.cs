@@ -31,20 +31,19 @@ namespace Grpc.Net.Client.Internal
     {
         private readonly GrpcCall<TRequest, TResponse> _call;
         private readonly string _grpcEncoding;
-        private readonly Task<Stream> _writeStreamTask;
-        private readonly TaskCompletionSource<bool> _completeTcs;
         private readonly object _writeLock;
         private Task? _writeTask;
 
+        public TaskCompletionSource<Stream> WriteStreamTcs { get; }
+        public TaskCompletionSource<bool> CompleteTcs { get; }
+
         public HttpContentClientStreamWriter(
             GrpcCall<TRequest, TResponse> call,
-            HttpRequestMessage message,
-            Task<Stream> writeStreamTask,
-            TaskCompletionSource<bool> completeTcs)
+            HttpRequestMessage message)
         {
             _call = call;
-            _writeStreamTask = writeStreamTask;
-            _completeTcs = completeTcs;
+            WriteStreamTcs = new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
+            CompleteTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
             _writeLock = new object();
             WriteOptions = _call.Options.WriteOptions;
             _grpcEncoding = GrpcProtocolHelpers.GetRequestEncoding(message.Headers);
@@ -71,7 +70,7 @@ namespace Grpc.Net.Client.Internal
                     }
 
                     // Notify that the client stream is complete
-                    _completeTcs.TrySetResult(true);
+                    CompleteTcs.TrySetResult(true);
                 }
             }
 
@@ -104,7 +103,7 @@ namespace Grpc.Net.Client.Internal
                     }
 
                     // CompleteAsync has already been called
-                    if (_completeTcs.Task.IsCompletedSuccessfully)
+                    if (CompleteTcs.Task.IsCompletedSuccessfully)
                     {
                         return CreateErrorTask("Can't write the message because the client stream writer is complete.");
                     }
@@ -137,7 +136,7 @@ namespace Grpc.Net.Client.Internal
         private async Task WriteAsyncCore(TRequest message)
         {
             // Wait until the client stream has started
-            var writeStream = await _writeStreamTask.ConfigureAwait(false);
+            var writeStream = await WriteStreamTcs.Task.ConfigureAwait(false);
 
             // WriteOptions set on the writer take precedence over the CallOptions.WriteOptions
             var callOptions = _call.Options;

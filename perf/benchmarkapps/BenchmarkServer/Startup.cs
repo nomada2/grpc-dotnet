@@ -45,7 +45,7 @@ namespace BenchmarkServer
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapGrpcService<GreeterService>();
-
+                endpoints.MapGrpcService<DataService>();
 
                 endpoints.MapControllers();
                 

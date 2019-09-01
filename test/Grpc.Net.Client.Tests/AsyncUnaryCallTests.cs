@@ -118,7 +118,7 @@ namespace Grpc.Net.Client.Tests
                 GrpcProtocolConstants.IdentityGrpcEncoding,
                 maximumMessageSize: null,
                 GrpcProtocolConstants.DefaultCompressionProviders,
-                CancellationToken.None).DefaultTimeout();
+                CancellationToken.None).AsTask().DefaultTimeout();
 
             Assert.AreEqual("World", requestMessage.Name);
         }

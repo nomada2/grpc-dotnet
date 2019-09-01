@@ -36,6 +36,9 @@ namespace Grpc.Net.Client.Internal
         where TRequest : class
         where TResponse : class
     {
+        // Getting logger name from generic type is slow
+        private const string LoggerName = "Grpc.Net.Client.Internal.GrpcCall";
+
         private readonly CancellationTokenSource _callCts;
         private readonly TaskCompletionSource<Status> _callTcs;
         private readonly TimeSpan? _timeout;
@@ -45,8 +48,6 @@ namespace Grpc.Net.Client.Internal
         private Timer? _deadlineTimer;
         private Metadata? _trailers;
         private CancellationTokenRegistration? _ctsRegistration;
-        private TaskCompletionSource<Stream>? _writeStreamTcs;
-        private TaskCompletionSource<bool>? _writeCompleteTcs;
 
         public bool Disposed { get; private set; }
         public bool ResponseFinished { get; private set; }
@@ -60,7 +61,7 @@ namespace Grpc.Net.Client.Internal
         public HttpContentClientStreamWriter<TRequest, TResponse>? ClientStreamWriter { get; private set; }
         public HttpContentClientStreamReader<TRequest, TResponse>? ClientStreamReader { get; private set; }
 
-        public GrpcCall(Method<TRequest, TResponse> method, CallOptions options, GrpcChannel channel)
+        public GrpcCall(Method<TRequest, TResponse> method, Uri uri, GrpcCallScope logScope, CallOptions options, GrpcChannel channel)
         {
             // Validate deadline before creating any objects that require cleanup
             ValidateDeadline(options.Deadline);
@@ -68,11 +69,11 @@ namespace Grpc.Net.Client.Internal
             _callCts = new CancellationTokenSource();
             _callTcs = new TaskCompletionSource<Status>(TaskContinuationOptions.RunContinuationsAsynchronously);
             Method = method;
-            _uri = new Uri(method.FullName, UriKind.Relative);
-            _logScope = new GrpcCallScope(method.Type, _uri);
+            _uri = uri;
+            _logScope = logScope;
             Options = options;
             Channel = channel;
-            Logger = channel.LoggerFactory.CreateLogger<GrpcCall<TRequest, TResponse>>();
+            Logger = channel.LoggerFactory.CreateLogger(LoggerName);
 
             if (options.Deadline != null && options.Deadline != DateTime.MaxValue)
             {
@@ -106,7 +107,7 @@ namespace Grpc.Net.Client.Internal
         public void StartClientStreaming()
         {
             var message = CreateHttpRequestMessage();
-            ClientStreamWriter = CreateWriter(message);
+            CreateWriter(message);
             _ = StartAsync(message);
         }
 
@@ -121,7 +122,7 @@ namespace Grpc.Net.Client.Internal
         public void StartDuplexStreaming()
         {
             var message = CreateHttpRequestMessage();
-            ClientStreamWriter = CreateWriter(message);
+            CreateWriter(message);
             _ = StartAsync(message);
             ClientStreamReader = new HttpContentClientStreamReader<TRequest, TResponse>(this);
         }
@@ -157,8 +158,8 @@ namespace Grpc.Net.Client.Internal
             }
             else
             {
-                _writeStreamTcs?.TrySetCanceled();
-                _writeCompleteTcs?.TrySetCanceled();
+                ClientStreamWriter?.WriteStreamTcs.TrySetCanceled();
+                ClientStreamWriter?.CompleteTcs.TrySetCanceled();
 
                 // If response has successfully finished then the status will come from the trailers
                 // If it didn't finish then complete with a status
@@ -366,33 +367,57 @@ namespace Grpc.Net.Client.Internal
 
         private void SetMessageContent(TRequest request, HttpRequestMessage message)
         {
-            message.Content = new PushStreamContent(
-                (stream) =>
-                {
-                    var grpcEncoding = GrpcProtocolHelpers.GetRequestEncoding(message.Headers);
-
-                    var writeMessageTask = stream.WriteMessageAsync<TRequest>(
-                        Logger,
-                        request,
-                        Method.RequestMarshaller.ContextualSerializer,
-                        grpcEncoding,
-                        Channel.SendMaxMessageSize,
-                        Channel.CompressionProviders,
-                        Options);
-                    if (writeMessageTask.IsCompletedSuccessfully)
-                    {
-                        GrpcEventSource.Log.MessageSent();
-                        return Task.CompletedTask;
-                    }
-
-                    return WriteMessageCore(writeMessageTask);
-                },
+            message.Content = new PushOneContent(
+                request,
+                this,
+                GrpcProtocolHelpers.GetRequestEncoding(message.Headers),
                 GrpcProtocolConstants.GrpcContentTypeHeaderValue);
+        }
 
-            static async Task WriteMessageCore(Task writeMessageTask)
+        internal class PushOneContent : HttpContent
+        {
+            private readonly TRequest _content;
+            private readonly GrpcCall<TRequest, TResponse> _call;
+            private readonly string _grpcEncoding;
+
+            public PushOneContent(TRequest content, GrpcCall<TRequest, TResponse> call, string grpcEncoding, MediaTypeHeaderValue mediaType)
+            {
+                _content = content;
+                _call = call;
+                _grpcEncoding = grpcEncoding;
+                Headers.ContentType = mediaType;
+            }
+
+            protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+            {
+                var writeMessageTask = stream.WriteMessageAsync<TRequest>(
+                    _call.Logger,
+                    _content,
+                    _call.Method.RequestMarshaller.ContextualSerializer,
+                    _grpcEncoding,
+                    _call.Channel.SendMaxMessageSize,
+                    _call.Channel.CompressionProviders,
+                    _call.Options);
+                if (writeMessageTask.IsCompletedSuccessfully)
+                {
+                    GrpcEventSource.Log.MessageSent();
+                    return Task.CompletedTask;
+                }
+
+                return WriteMessageCore(writeMessageTask);
+            }
+
+            private static async Task WriteMessageCore(ValueTask writeMessageTask)
             {
                 await writeMessageTask.ConfigureAwait(false);
                 GrpcEventSource.Log.MessageSent();
+            }
+
+            protected override bool TryComputeLength(out long length)
+            {
+                // We can't know the length of the content being pushed to the output stream.
+                length = -1;
+                return false;
             }
         }
 
@@ -407,8 +432,8 @@ namespace Grpc.Net.Client.Internal
                 _callCts.Cancel();
 
                 // Canceling call will cancel pending writes to the stream
-                _writeCompleteTcs?.TrySetCanceled();
-                _writeStreamTcs?.TrySetCanceled();
+                ClientStreamWriter?.WriteStreamTcs.TrySetCanceled();
+                ClientStreamWriter?.CompleteTcs.TrySetCanceled();
             }
 
             // If response has successfully finished then the status will come from the trailers
@@ -616,10 +641,9 @@ namespace Grpc.Net.Client.Internal
             return new AuthInterceptorContext(serviceUrl, method.Name);
         }
 
-        private HttpContentClientStreamWriter<TRequest, TResponse> CreateWriter(HttpRequestMessage message)
+        private void CreateWriter(HttpRequestMessage message)
         {
-            _writeStreamTcs = new TaskCompletionSource<Stream>(TaskCreationOptions.RunContinuationsAsynchronously);
-            _writeCompleteTcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+            ClientStreamWriter = new HttpContentClientStreamWriter<TRequest, TResponse>(this, message);
 
             message.Content = new PushStreamContent(
                 async stream =>
@@ -629,20 +653,17 @@ namespace Grpc.Net.Client.Internal
                     await stream.FlushAsync().ConfigureAwait(false);
 
                     // Pass request stream to writer
-                    _writeStreamTcs.TrySetResult(stream);
+                    ClientStreamWriter.WriteStreamTcs.TrySetResult(stream);
 
                     // Wait for the writer to report it is complete
-                    await _writeCompleteTcs.Task.ConfigureAwait(false);
+                    await ClientStreamWriter.CompleteTcs.Task.ConfigureAwait(false);
                 },
                 GrpcProtocolConstants.GrpcContentTypeHeaderValue);
-
-            var writer = new HttpContentClientStreamWriter<TRequest, TResponse>(this, message, _writeStreamTcs.Task, _writeCompleteTcs);
-            return writer;
         }
 
         private HttpRequestMessage CreateHttpRequestMessage()
         {
-            var message = new HttpRequestMessage(HttpMethod.Post, new Uri(Channel.Address, _uri));
+            var message = new HttpRequestMessage(HttpMethod.Post, _uri);
             message.Version = new Version(2, 0);
             // User agent is optional but recommended
             message.Headers.UserAgent.Add(GrpcProtocolConstants.UserAgentHeader);

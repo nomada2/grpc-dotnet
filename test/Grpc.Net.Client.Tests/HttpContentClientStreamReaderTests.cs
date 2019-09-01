@@ -49,7 +49,7 @@ namespace Grpc.Net.Client.Tests
             });
 
             var channel = GrpcChannel.ForAddress(httpClient.BaseAddress, new GrpcChannelOptions { HttpClient = httpClient });
-            var call = new GrpcCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, new CallOptions(), channel);
+            var call = CreateGrpcCall(channel);
             call.StartServerStreaming(new HelloRequest());
 
             // Act
@@ -74,7 +74,7 @@ namespace Grpc.Net.Client.Tests
             });
 
             var channel = GrpcChannel.ForAddress(httpClient.BaseAddress, new GrpcChannelOptions { HttpClient = httpClient });
-            var call = new GrpcCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, new CallOptions(), channel);
+            var call = CreateGrpcCall(channel);
             call.StartServerStreaming(new HelloRequest());
 
             // Act
@@ -100,7 +100,7 @@ namespace Grpc.Net.Client.Tests
             });
 
             var channel = GrpcChannel.ForAddress(httpClient.BaseAddress, new GrpcChannelOptions { HttpClient = httpClient });
-            var call = new GrpcCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, new CallOptions(), channel);
+            var call = CreateGrpcCall(channel);
             call.StartServerStreaming(new HelloRequest());
 
             // Act
@@ -112,6 +112,18 @@ namespace Grpc.Net.Client.Tests
 
             var ex = await ExceptionAssert.ThrowsAsync<InvalidOperationException>(() => moveNextTask2).DefaultTimeout();
             Assert.AreEqual("Can't read the next message because the previous read is still in progress.", ex.Message);
+        }
+
+        private static GrpcCall<HelloRequest, HelloReply> CreateGrpcCall(GrpcChannel channel)
+        {
+            var uri = new Uri("http://localhost");
+
+            return new GrpcCall<HelloRequest, HelloReply>(
+                ClientTestHelpers.ServiceMethod,
+                uri,
+                new GrpcCallScope(ClientTestHelpers.ServiceMethod.Type, uri),
+                new CallOptions(),
+                channel);
         }
     }
 }

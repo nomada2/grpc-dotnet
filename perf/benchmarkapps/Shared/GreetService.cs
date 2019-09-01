@@ -22,7 +22,7 @@ using Google.Protobuf.WellKnownTypes;
 using Greet;
 using Grpc.Core;
 
-class GreeterService : Greeter.GreeterBase
+class GreeterService : GreetService.GreetServiceBase
 {
     public override Task<HelloReply> SayHello(HelloRequest request, ServerCallContext context)
     {
@@ -35,20 +35,14 @@ class GreeterService : Greeter.GreeterBase
 
     public override async Task SayHellos(HelloRequest request, IServerStreamWriter<HelloReply> responseStream, ServerCallContext context)
     {
-        for (var i = 0; i < 3; i++)
+        while (!context.CancellationToken.IsCancellationRequested)
         {
-            var message = $"How are you {request.Name}? {i}";
+            var message = "Hello " + request.Name;
             await responseStream.WriteAsync(new HelloReply
             {
                 Message = message,
                 Timestamp = Timestamp.FromDateTime(DateTime.UtcNow)
             });
         }
-
-        await responseStream.WriteAsync(new HelloReply
-        {
-            Message = $"Goodbye {request.Name}!",
-            Timestamp = Timestamp.FromDateTime(DateTime.UtcNow)
-        });
     }
 }

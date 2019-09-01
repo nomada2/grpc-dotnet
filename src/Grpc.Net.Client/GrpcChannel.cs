@@ -17,12 +17,9 @@
 #endregion
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Diagnostics;
-using System.Linq;
 using System.Net.Http;
-using System.Net.Mail;
-using System.Threading;
 using Grpc.Core;
 using Grpc.Net.Client.Internal;
 using Grpc.Net.Compression;
@@ -44,12 +41,13 @@ namespace Grpc.Net.Client
         internal HttpClient HttpClient { get; }
         internal int? SendMaxMessageSize { get; }
         internal int? ReceiveMaxMessageSize { get; }
-        internal ILoggerFactory LoggerFactory { get; }
         internal bool? IsSecure { get; }
         internal List<CallCredentials>? CallCredentials { get; }
         internal Dictionary<string, ICompressionProvider> CompressionProviders { get; }
         internal string MessageAcceptEncoding { get; }
+        internal ILoggerFactory LoggerFactory { get; }
         internal bool Disposed { get; private set; }
+        private ConcurrentDictionary<IMethod, GrpcMethodInfo> _methodInfoCache;
 
         // Timing related options that are set in unit tests
         internal ISystemClock Clock = SystemClock.Instance;
@@ -59,6 +57,8 @@ namespace Grpc.Net.Client
 
         internal GrpcChannel(Uri address, GrpcChannelOptions channelOptions) : base(address.Authority)
         {
+            _methodInfoCache = new ConcurrentDictionary<IMethod, GrpcMethodInfo>();
+
             // Dispose the HttpClient if...
             //   1. No client was specified and so the channel created the HttpClient itself
             //   2. User has specified a client and set DisposeHttpClient to true
@@ -82,6 +82,19 @@ namespace Grpc.Net.Client
 
                 ValidateChannelCredentials();
             }
+        }
+
+        internal GrpcMethodInfo GrpcMethodInfo(IMethod method)
+        {
+            return _methodInfoCache.GetOrAdd(method, CreateMethodInfo);
+        }
+
+        private GrpcMethodInfo CreateMethodInfo(IMethod method)
+        {
+            var uri = new Uri(method.FullName, UriKind.Relative);
+            var scope = new GrpcCallScope(method.Type, uri);
+
+            return new GrpcMethodInfo(scope, new Uri(Address, uri));
         }
 
         private static Dictionary<string, ICompressionProvider> ResolveCompressionProviders(IList<ICompressionProvider>? compressionProviders)

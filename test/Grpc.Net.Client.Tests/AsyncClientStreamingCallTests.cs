@@ -118,7 +118,7 @@ namespace Grpc.Net.Client.Tests
                 GrpcProtocolConstants.IdentityGrpcEncoding,
                 maximumMessageSize: null,
                 GrpcProtocolConstants.DefaultCompressionProviders,
-                CancellationToken.None).DefaultTimeout();
+                CancellationToken.None).AsTask().DefaultTimeout();
             Assert.AreEqual("1", requestMessage.Name);
             requestMessage = await requestContent.ReadStreamedMessageAsync(
                 NullLogger.Instance,
@@ -126,7 +126,7 @@ namespace Grpc.Net.Client.Tests
                 GrpcProtocolConstants.IdentityGrpcEncoding,
                 maximumMessageSize: null,
                 GrpcProtocolConstants.DefaultCompressionProviders,
-                CancellationToken.None).DefaultTimeout();
+                CancellationToken.None).AsTask().DefaultTimeout();
             Assert.AreEqual("2", requestMessage.Name);
 
             var responseMessage = await responseTask.DefaultTimeout();
