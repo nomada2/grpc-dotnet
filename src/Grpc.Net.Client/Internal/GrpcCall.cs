@@ -20,7 +20,6 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
-using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
@@ -167,8 +166,8 @@ namespace Grpc.Net.Client.Internal
                 ClientStreamWriter?.WriteStreamTcs.TrySetCanceled();
                 ClientStreamWriter?.CompleteTcs.TrySetCanceled();
 
-                // If response has successfully finished then the status will come from the trailers
-                // If it didn't finish then complete with a status
+                // If response has successfully finished then the status will come from the trailers.
+                // If it didn't finish then complete with a status.
                 _callTcs.TrySetResult(status);
             }
 
@@ -178,10 +177,10 @@ namespace Grpc.Net.Client.Internal
             ClientStreamReader?.Dispose();
             ClientStreamWriter?.Dispose();
 
-            // To avoid racing with Dispose, skip disposing the call CTS
-            // This avoid Dispose potentially calling cancel on a disposed CTS
+            // To avoid racing with Dispose, skip disposing the call CTS.
+            // This avoid Dispose potentially calling cancel on a disposed CTS.
             // The call CTS is not exposed externally and all dependent registrations
-            // are cleaned up
+            // are cleaned up.
         }
 
         public void EnsureNotDisposed()
@@ -198,7 +197,7 @@ namespace Grpc.Net.Client.Internal
         /// <see cref="HttpContentClientStreamReader{TRequest,TResponse}.MoveNextCore(CancellationToken)"/>
         /// for server streaming and duplex streaming calls.
         /// </summary>
-        public Status FinishResponse(bool throwOnFail, Status? status = null)
+        public Status FinishResponse(Status? status = null)
         {
             ResponseFinished = true;
             Debug.Assert(HttpResponse != null);
@@ -223,16 +222,6 @@ namespace Grpc.Net.Client.Internal
             // Call may not be explicitly disposed when used with unary methods
             // e.g. var reply = await client.SayHelloAsync(new HelloRequest());
             Cleanup(status.Value);
-
-            // Get status from response before dispose
-            // This may throw an error if the grpc-status is missing or malformed
-            if (status.Value.StatusCode != StatusCode.OK)
-            {
-                if (throwOnFail)
-                {
-                    throw new RpcException(status.Value);
-                }
-            }
 
             return status.Value;
         }
@@ -313,58 +302,11 @@ namespace Grpc.Net.Client.Internal
 
         private void SetMessageContent(TRequest request, HttpRequestMessage message)
         {
-            message.Content = new PushOneContent(
+            message.Content = new PushOneContent<TRequest, TResponse>(
                 request,
                 this,
                 GrpcProtocolHelpers.GetRequestEncoding(message.Headers),
                 GrpcProtocolConstants.GrpcContentTypeHeaderValue);
-        }
-
-        internal class PushOneContent : HttpContent
-        {
-            private readonly TRequest _content;
-            private readonly GrpcCall<TRequest, TResponse> _call;
-            private readonly string _grpcEncoding;
-
-            public PushOneContent(TRequest content, GrpcCall<TRequest, TResponse> call, string grpcEncoding, MediaTypeHeaderValue mediaType)
-            {
-                _content = content;
-                _call = call;
-                _grpcEncoding = grpcEncoding;
-                Headers.ContentType = mediaType;
-            }
-
-            protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
-            {
-                var writeMessageTask = stream.WriteMessageAsync<TRequest>(
-                    _call.Logger,
-                    _content,
-                    _call.Method.RequestMarshaller.ContextualSerializer,
-                    _grpcEncoding,
-                    _call.Channel.SendMaxMessageSize,
-                    _call.Channel.CompressionProviders,
-                    _call.Options);
-                if (writeMessageTask.IsCompletedSuccessfully)
-                {
-                    GrpcEventSource.Log.MessageSent();
-                    return Task.CompletedTask;
-                }
-
-                return WriteMessageCore(writeMessageTask);
-            }
-
-            private static async Task WriteMessageCore(ValueTask writeMessageTask)
-            {
-                await writeMessageTask.ConfigureAwait(false);
-                GrpcEventSource.Log.MessageSent();
-            }
-
-            protected override bool TryComputeLength(out long length)
-            {
-                // We can't know the length of the content being pushed to the output stream.
-                length = -1;
-                return false;
-            }
         }
 
         private void CancelCall(Status status)
@@ -422,20 +364,16 @@ namespace Grpc.Net.Client.Internal
                 {
                     Log.ErrorStartingCall(Logger, ex);
                     status = new Status(StatusCode.Cancelled, "Error starting gRPC call.");
+
                     _metadataTcs.TrySetException(ex);
                     _responseTcs?.TrySetException(ex);
+
+                    CancelCall(status.Value);
                 }
 
                 if (HttpResponse != null)
                 {
-                    try
-                    {
-                        _metadataTcs.TrySetResult(GrpcProtocolHelpers.BuildMetadata(HttpResponse.Headers));
-                    }
-                    catch (Exception ex)
-                    {
-                        _metadataTcs.TrySetException(ex);
-                    }
+                    BuildMetadata(HttpResponse);
 
                     status = ValidateHeaders(HttpResponse);
 
@@ -455,7 +393,7 @@ namespace Grpc.Net.Client.Internal
                                 _responseTcs.TrySetException(new InvalidOperationException("Call did not return a response message"));
                             }
 
-                            FinishResponse(throwOnFail: false, status.Value);
+                            FinishResponse(status.Value);
                         }
                         else
                         {
@@ -471,7 +409,7 @@ namespace Grpc.Net.Client.Internal
                                     Channel.ReceiveMaxMessageSize,
                                     Channel.CompressionProviders,
                                     _callCts.Token).ConfigureAwait(false);
-                                status = FinishResponse(throwOnFail: false);
+                                status = FinishResponse();
 
                                 if (message == null)
                                 {
@@ -519,7 +457,7 @@ namespace Grpc.Net.Client.Internal
 
                         if (status != null)
                         {
-                            FinishResponse(throwOnFail: false, status.Value);
+                            FinishResponse(status.Value);
                         }
                         else
                         {
@@ -531,6 +469,18 @@ namespace Grpc.Net.Client.Internal
                 }
 
                 FinishCall(request, diagnosticSourceEnabled, activity, status);
+            }
+        }
+
+        private void BuildMetadata(HttpResponseMessage httpResponse)
+        {
+            try
+            {
+                _metadataTcs.TrySetResult(GrpcProtocolHelpers.BuildMetadata(httpResponse.Headers));
+            }
+            catch (Exception ex)
+            {
+                _metadataTcs.TrySetException(ex);
             }
         }
 
@@ -887,14 +837,8 @@ namespace Grpc.Net.Client.Internal
                 return;
             }
 
-            // Call could have been canceled or deadline exceeded
-            if (_callCts.IsCancellationRequested)
-            {
-                // Throw InvalidOperationException here because documentation on GetTrailers says that
-                // InvalidOperationException is thrown if the call is not complete.
-                throw new InvalidOperationException("Can't get the call trailers because the call was canceled.");
-            }
-
+            // Throw InvalidOperationException here because documentation on GetTrailers says that
+            // InvalidOperationException is thrown if the call is not complete.
             throw new InvalidOperationException("Can't get the call trailers because the call has not completed successfully.");
         }
     }

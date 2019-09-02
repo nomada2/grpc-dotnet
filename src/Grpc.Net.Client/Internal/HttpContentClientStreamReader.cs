@@ -172,7 +172,12 @@ namespace Grpc.Net.Client.Internal
                 if (Current == null)
                 {
                     // No more content in response so mark as finished
-                    _call.FinishResponse(throwOnFail: true);
+                    var status = _call.FinishResponse();
+                    if (status.StatusCode != StatusCode.OK)
+                    {
+                        throw new RpcException(status);
+                    }
+
                     return false;
                 }
 
