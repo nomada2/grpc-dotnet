@@ -140,7 +140,7 @@ namespace Grpc.Net.Client.Tests
         }
 
         [Test]
-        public void AsyncServerStreamingCall_ErrorSendingRequest_ReturnsError()
+        public async Task AsyncServerStreamingCall_ErrorSendingRequest_ReturnsError()
         {
             // Arrange
             var httpClient = ClientTestHelpers.CreateTestClient(request =>
@@ -151,7 +151,7 @@ namespace Grpc.Net.Client.Tests
 
             // Act
             var call = invoker.AsyncServerStreamingCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(), new HelloRequest());
-            var ex = Assert.CatchAsync<Exception>(() => call.ResponseHeadersAsync);
+            var ex = await ExceptionAssert.ThrowsAsync<Exception>(() => call.ResponseHeadersAsync).DefaultTimeout();
 
             // Assert
             Assert.AreEqual("An error!", ex.Message);

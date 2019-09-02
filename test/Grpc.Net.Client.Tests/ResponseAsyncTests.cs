@@ -94,7 +94,7 @@ namespace Grpc.Net.Client.Tests
         }
 
         [Test]
-        public void AsyncUnaryCall_ErrorSendingRequest_ThrowsError()
+        public async Task AsyncUnaryCall_ErrorSendingRequest_ThrowsError()
         {
             // Arrange
             var httpClient = ClientTestHelpers.CreateTestClient(request =>
@@ -105,7 +105,7 @@ namespace Grpc.Net.Client.Tests
 
             // Act
             var call = invoker.AsyncUnaryCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(), new HelloRequest());
-            var ex = Assert.CatchAsync<Exception>(() => call.ResponseAsync);
+            var ex = await ExceptionAssert.ThrowsAsync<Exception>(() => call.ResponseAsync).DefaultTimeout();
 
             // Assert
             Assert.AreEqual("An error!", ex.Message);

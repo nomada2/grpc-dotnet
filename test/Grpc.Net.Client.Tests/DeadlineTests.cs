@@ -222,13 +222,13 @@ namespace Grpc.Net.Client.Tests
             var call = invoker.AsyncUnaryCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(deadline: invoker.Channel.Clock.UtcNow.AddSeconds(0.5)), new HelloRequest());
 
             // Assert
-            var result = await call;
+            var result = await call.ResponseAsync.DefaultTimeout();
             Assert.IsNotNull(result);
 
             // Wait for deadline to trigger
             await Task.Delay(1000);
 
-            Assert.IsNotNull(await call.ResponseHeadersAsync);
+            Assert.IsNotNull(await call.ResponseHeadersAsync.DefaultTimeout());
 
             Assert.IsNotNull(call.GetTrailers());
 

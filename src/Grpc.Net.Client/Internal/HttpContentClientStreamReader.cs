@@ -36,6 +36,7 @@ namespace Grpc.Net.Client.Internal
         private readonly GrpcCall<TRequest, TResponse> _call;
         private readonly object _moveNextLock;
 
+        private readonly TaskCompletionSource<(HttpResponseMessage, Status?)> _httpResponseTcs;
         private HttpResponseMessage? _httpResponse;
         private Stream? _responseStream;
         private Task<bool>? _moveNextTask;
@@ -44,6 +45,7 @@ namespace Grpc.Net.Client.Internal
         {
             _call = call;
             _moveNextLock = new object();
+            _httpResponseTcs = new TaskCompletionSource<(HttpResponseMessage, Status?)>(TaskCreationOptions.RunContinuationsAsynchronously);
         }
 
         // IAsyncStreamReader<T> should declare Current as nullable
@@ -54,6 +56,11 @@ namespace Grpc.Net.Client.Internal
 
         public void Dispose()
         {
+        }
+
+        internal void SetHttpResponse(HttpResponseMessage httpResponse, Status? status)
+        {
+            _httpResponseTcs.TrySetResult((httpResponse, status));
         }
 
         public Task<bool> MoveNext(CancellationToken cancellationToken)
@@ -120,11 +127,13 @@ namespace Grpc.Net.Client.Internal
 
                 if (_httpResponse == null)
                 {
-                    Debug.Assert(_call.SendTask != null);
-                    await _call.SendTask.ConfigureAwait(false);
+                    var (httpResponse, status) = await _httpResponseTcs.Task.ConfigureAwait(false);
+                    if (status != null)
+                    {
+                        throw new RpcException(status.Value);
+                    }
 
-                    Debug.Assert(_call.HttpResponse != null);
-                    _httpResponse = _call.HttpResponse;
+                    _httpResponse = httpResponse;
                 }
                 if (_responseStream == null)
                 {
