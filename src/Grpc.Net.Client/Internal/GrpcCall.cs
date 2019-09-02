@@ -514,13 +514,19 @@ namespace Grpc.Net.Client.Internal
                     }
                     else
                     {
-
                         Debug.Assert(ClientStreamReader != null);
                         ClientStreamReader.SetHttpResponse(HttpResponse, status);
 
-                        // This is a duplex or server streaming call. Wait until the call is complete.
-                        // TCS will be set in Dispose.
-                        status = await CallTask.ConfigureAwait(false);
+                        if (status != null)
+                        {
+                            FinishResponse(throwOnFail: false, status.Value);
+                        }
+                        else
+                        {
+                            // This is a duplex or server streaming call. Wait until the call is complete.
+                            // TCS will be set in Dispose.
+                            status = await CallTask.ConfigureAwait(false);
+                        }
                     }
                 }
 

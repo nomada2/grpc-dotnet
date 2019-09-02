@@ -247,9 +247,9 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
 
                 // Response will only be headers so the call is "done" on the server side
                 await call.ResponseHeadersAsync.DefaultTimeout();
-                await call.RequestStream.CompleteAsync();
+                await call.RequestStream.CompleteAsync().DefaultTimeout();
 
-                var ex = await ExceptionAssert.ThrowsAsync<RpcException>(() => call.ResponseStream.MoveNext());
+                var ex = await ExceptionAssert.ThrowsAsync<RpcException>(() => call.ResponseStream.MoveNext()).DefaultTimeout();
                 var status = call.GetStatus();
 
                 // Assert
