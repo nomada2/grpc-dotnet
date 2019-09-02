@@ -187,7 +187,7 @@ namespace Grpc.Net.Client.Tests
             // Act
             var call = invoker.AsyncServerStreamingCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(), new HelloRequest());
             var headers = await call.ResponseHeadersAsync.DefaultTimeout();
-            await call.ResponseStream.MoveNext(CancellationToken.None).DefaultTimeout();
+            Assert.IsFalse(await call.ResponseStream.MoveNext(CancellationToken.None).DefaultTimeout());
 
             // Assert
             Assert.NotNull(responseMessage);

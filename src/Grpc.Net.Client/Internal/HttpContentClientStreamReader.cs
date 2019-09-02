@@ -128,7 +128,7 @@ namespace Grpc.Net.Client.Internal
                 if (_httpResponse == null)
                 {
                     var (httpResponse, status) = await _httpResponseTcs.Task.ConfigureAwait(false);
-                    if (status != null)
+                    if (status != null && status.Value.StatusCode != StatusCode.OK)
                     {
                         throw new RpcException(status.Value);
                     }

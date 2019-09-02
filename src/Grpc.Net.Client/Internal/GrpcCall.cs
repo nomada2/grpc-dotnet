@@ -261,32 +261,31 @@ namespace Grpc.Net.Client.Internal
             return _responseTcs.Task;
         }
 
-        private Status? ValidateHeaders()
+        private Status? ValidateHeaders(HttpResponseMessage httpResponse)
         {
             // We don't want to throw in this method, even for non-success situations.
             // Response is still needed to return headers in GetResponseHeadersAsync.
 
             Log.ResponseHeadersReceived(Logger);
 
-            Debug.Assert(HttpResponse != null);
-            if (HttpResponse.StatusCode != HttpStatusCode.OK)
+            if (httpResponse.StatusCode != HttpStatusCode.OK)
             {
-                return new Status(StatusCode.Cancelled, "Bad gRPC response. Expected HTTP status code 200. Got status code: " + (int)HttpResponse.StatusCode);
+                return new Status(StatusCode.Cancelled, "Bad gRPC response. Expected HTTP status code 200. Got status code: " + (int)httpResponse.StatusCode);
             }
             
-            if (HttpResponse.Content?.Headers.ContentType == null)
+            if (httpResponse.Content?.Headers.ContentType == null)
             {
                 return new Status(StatusCode.Cancelled, "Bad gRPC response. Response did not have a content-type header.");
             }
 
-            var grpcEncoding = HttpResponse.Content.Headers.ContentType.ToString();
+            var grpcEncoding = httpResponse.Content.Headers.ContentType.ToString();
             if (!GrpcProtocolHelpers.IsGrpcContentType(grpcEncoding))
             {
                 return new Status(StatusCode.Cancelled, "Bad gRPC response. Invalid content-type value: " + grpcEncoding);
             }
             else
             {
-                if (TryGetStatusCore(HttpResponse.Headers, out var status))
+                if (TryGetStatusCore(httpResponse.Headers, out var status))
                 {
                     return status;
                 }
@@ -402,92 +401,11 @@ namespace Grpc.Net.Client.Internal
             return null;
         }
 
-        private async Task<TResponse> NewMethod()
-        {
-            // Verify the call is not complete. The call should be complete once the grpc-status
-            // has been read from trailers, which happens AFTER the message has been read.
-            if (CallTask.IsCompletedSuccessfully)
-            {
-                var status = CallTask.Result;
-            }
-
-            Debug.Assert(HttpResponse != null);
-
-            // Trailers are only available once the response body had been read
-            var responseStream = await HttpResponse.Content.ReadAsStreamAsync().ConfigureAwait(false);
-            var message = await responseStream.ReadSingleMessageAsync(
-                Logger,
-                Method.ResponseMarshaller.ContextualDeserializer,
-                GrpcProtocolHelpers.GetGrpcEncoding(HttpResponse),
-                Channel.ReceiveMaxMessageSize,
-                Channel.CompressionProviders,
-                _callCts.Token).ConfigureAwait(false);
-            FinishResponse(throwOnFail: true);
-
-            if (message == null)
-            {
-                Log.MessageNotReturned(Logger);
-                throw new InvalidOperationException("Call did not return a response message");
-            }
-
-            GrpcEventSource.Log.MessageReceived();
-
-            // The task of this method is cached so there is no need to cache the message here
-            return message;
-        }
-
         private async ValueTask StartAsync(HttpRequestMessage request)
         {
             using (StartScope())
             {
-                if (_timeout != null && !Channel.DisableClientDeadlineTimer)
-                {
-                    Log.StartingDeadlineTimeout(Logger, _timeout.Value);
-
-                    // Deadline timer will cancel the call CTS
-                    // Start timer after reader/writer have been created, otherwise a zero length deadline could cancel
-                    // the call CTS before they are created and leave them in a non-canceled state
-                    _deadlineTimer = new Timer(DeadlineExceeded, null, _timeout.Value, Timeout.InfiniteTimeSpan);
-                }
-
-                Log.StartingCall(Logger, Method.Type, request.RequestUri);
-                GrpcEventSource.Log.CallStart(Method.FullName);
-
-                var diagnosticSourceEnabled =
-                    GrpcDiagnostics.DiagnosticListener.IsEnabled() &&
-                    GrpcDiagnostics.DiagnosticListener.IsEnabled(GrpcDiagnostics.ActivityName, request);
-
-                Activity? activity = null;
-
-                // Set activity if:
-                // 1. Diagnostic source is enabled
-                // 2. Logging is enabled
-                // 3. There is an existing activity (to enable activity propagation)
-                if (diagnosticSourceEnabled || Logger.IsEnabled(LogLevel.Critical) || Activity.Current != null)
-                {
-                    activity = new Activity(GrpcDiagnostics.ActivityName);
-                    activity.AddTag(GrpcDiagnostics.GrpcMethodTagName, Method.FullName);
-                    activity.Start();
-
-                    if (diagnosticSourceEnabled)
-                    {
-                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStartKey, new { Request = request });
-                    }
-                }
-
-                if (Options.CancellationToken.CanBeCanceled)
-                {
-                    // The cancellation token will cancel the call CTS.
-                    // This must be registered after the client writer has been created
-                    // so that cancellation will always complete the writer.
-                    _ctsRegistration = Options.CancellationToken.Register(() =>
-                    {
-                        using (StartScope())
-                        {
-                            CancelCall(new Status(StatusCode.Cancelled, "Call canceled by the client."));
-                        }
-                    });
-                }
+                var (diagnosticSourceEnabled, activity) = SetupRequest(request);
 
                 if (Options.Credentials != null || Channel.CallCredentials?.Count > 0)
                 {
@@ -519,7 +437,7 @@ namespace Grpc.Net.Client.Internal
                         _metadataTcs.TrySetException(ex);
                     }
 
-                    status = ValidateHeaders();
+                    status = ValidateHeaders(HttpResponse);
 
                     if (_responseTcs != null)
                     {
@@ -537,7 +455,7 @@ namespace Grpc.Net.Client.Internal
                                 _responseTcs.TrySetException(new InvalidOperationException("Call did not return a response message"));
                             }
 
-                            Cleanup(status.Value);
+                            FinishResponse(throwOnFail: false, status.Value);
                         }
                         else
                         {
@@ -574,6 +492,11 @@ namespace Grpc.Net.Client.Internal
                                     }
                                 }
                             }
+                            catch (RpcException ex)
+                            {
+                                status = ex.Status;
+                                _responseTcs.TrySetException(ex);
+                            }
                             catch (Exception ex)
                             {
                                 if (status == null)
@@ -591,10 +514,6 @@ namespace Grpc.Net.Client.Internal
                     }
                     else
                     {
-                        if (status != null)
-                        {
-                            Cleanup(status.Value);
-                        }
 
                         Debug.Assert(ClientStreamReader != null);
                         ClientStreamReader.SetHttpResponse(HttpResponse, status);
@@ -605,38 +524,95 @@ namespace Grpc.Net.Client.Internal
                     }
                 }
 
-                if (status!.Value.StatusCode != StatusCode.OK)
+                FinishCall(request, diagnosticSourceEnabled, activity, status);
+            }
+        }
+
+        private void FinishCall(HttpRequestMessage request, bool diagnosticSourceEnabled, Activity? activity, Status? status)
+        {
+            if (status!.Value.StatusCode != StatusCode.OK)
+            {
+                Log.GrpcStatusError(Logger, status.Value.StatusCode, status.Value.Detail);
+                GrpcEventSource.Log.CallFailed(status.Value.StatusCode);
+            }
+            Log.FinishedCall(Logger);
+            GrpcEventSource.Log.CallStop();
+
+            // Activity needs to be stopped in the same execution context it was started
+            if (activity != null)
+            {
+                var statusText = status.Value.StatusCode.ToString("D");
+                if (statusText != null)
                 {
-                    Log.GrpcStatusError(Logger, status.Value.StatusCode, status.Value.Detail);
-                    GrpcEventSource.Log.CallFailed(status.Value.StatusCode);
+                    activity.AddTag(GrpcDiagnostics.GrpcStatusCodeTagName, statusText);
                 }
-                Log.FinishedCall(Logger);
-                GrpcEventSource.Log.CallStop();
 
-                // Activity needs to be stopped in the same execution context it was started
-                if (activity != null)
+                if (diagnosticSourceEnabled)
                 {
-                    var statusText = status.Value.StatusCode.ToString("D");
-                    if (statusText != null)
+                    // Stop sets the end time if it was unset, but we want it set before we issue the write
+                    // so we do it now.   
+                    if (activity.Duration == TimeSpan.Zero)
                     {
-                        activity.AddTag(GrpcDiagnostics.GrpcStatusCodeTagName, statusText);
+                        activity.SetEndTime(DateTime.UtcNow);
                     }
 
-                    if (diagnosticSourceEnabled)
-                    {
-                        // Stop sets the end time if it was unset, but we want it set before we issue the write
-                        // so we do it now.   
-                        if (activity.Duration == TimeSpan.Zero)
-                        {
-                            activity.SetEndTime(DateTime.UtcNow);
-                        }
+                    GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, new { Request = request, Response = HttpResponse });
+                }
 
-                        GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, new { Request = request, Response = HttpResponse });
-                    }
+                activity.Stop();
+            }
+        }
 
-                    activity.Stop();
+        private (bool diagnosticSourceEnabled, Activity? activity) SetupRequest(HttpRequestMessage request)
+        {
+            if (_timeout != null && !Channel.DisableClientDeadlineTimer)
+            {
+                Log.StartingDeadlineTimeout(Logger, _timeout.Value);
+
+                // Deadline timer will cancel the call CTS
+                // Start timer after reader/writer have been created, otherwise a zero length deadline could cancel
+                // the call CTS before they are created and leave them in a non-canceled state
+                _deadlineTimer = new Timer(DeadlineExceeded, null, _timeout.Value, Timeout.InfiniteTimeSpan);
+            }
+
+            Log.StartingCall(Logger, Method.Type, request.RequestUri);
+            GrpcEventSource.Log.CallStart(Method.FullName);
+
+            var diagnosticSourceEnabled = GrpcDiagnostics.DiagnosticListener.IsEnabled() &&
+                GrpcDiagnostics.DiagnosticListener.IsEnabled(GrpcDiagnostics.ActivityName, request);
+            Activity? activity = null;
+
+            // Set activity if:
+            // 1. Diagnostic source is enabled
+            // 2. Logging is enabled
+            // 3. There is an existing activity (to enable activity propagation)
+            if (diagnosticSourceEnabled || Logger.IsEnabled(LogLevel.Critical) || Activity.Current != null)
+            {
+                activity = new Activity(GrpcDiagnostics.ActivityName);
+                activity.AddTag(GrpcDiagnostics.GrpcMethodTagName, Method.FullName);
+                activity.Start();
+
+                if (diagnosticSourceEnabled)
+                {
+                    GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStartKey, new { Request = request });
                 }
             }
+
+            if (Options.CancellationToken.CanBeCanceled)
+            {
+                // The cancellation token will cancel the call CTS.
+                // This must be registered after the client writer has been created
+                // so that cancellation will always complete the writer.
+                _ctsRegistration = Options.CancellationToken.Register(() =>
+                {
+                    using (StartScope())
+                    {
+                        CancelCall(new Status(StatusCode.Cancelled, "Call canceled by the client."));
+                    }
+                });
+            }
+
+            return (diagnosticSourceEnabled, activity);
         }
 
         private async Task ReadCredentials(HttpRequestMessage request)
