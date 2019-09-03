@@ -580,20 +580,7 @@ namespace Grpc.Net.Client.Internal
         {
             ClientStreamWriter = new HttpContentClientStreamWriter<TRequest, TResponse>(this, message);
 
-            message.Content = new PushStreamContent(
-                async stream =>
-                {
-                    // Immediately flush request stream to send headers
-                    // https://github.com/dotnet/corefx/issues/39586#issuecomment-516210081
-                    await stream.FlushAsync().ConfigureAwait(false);
-
-                    // Pass request stream to writer
-                    ClientStreamWriter.WriteStreamTcs.TrySetResult(stream);
-
-                    // Wait for the writer to report it is complete
-                    await ClientStreamWriter.CompleteTcs.Task.ConfigureAwait(false);
-                },
-                GrpcProtocolConstants.GrpcContentTypeHeaderValue);
+            message.Content = new PushStreamContent<TRequest, TResponse>(ClientStreamWriter, GrpcProtocolConstants.GrpcContentTypeHeaderValue);
         }
 
         private HttpRequestMessage CreateHttpRequestMessage()

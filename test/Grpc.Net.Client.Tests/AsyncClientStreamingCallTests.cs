@@ -76,11 +76,11 @@ namespace Grpc.Net.Client.Tests
         public async Task AsyncClientStreamingCall_Success_RequestContentSent()
         {
             // Arrange
-            PushStreamContent? content = null;
+            PushStreamContent<HelloRequest, HelloReply>? content = null;
 
             var httpClient = ClientTestHelpers.CreateTestClient(async request =>
             {
-                content = (PushStreamContent)request.Content;
+                content = (PushStreamContent<HelloRequest, HelloReply>)request.Content;
                 await content.PushComplete.DefaultTimeout();
 
                 HelloReply reply = new HelloReply

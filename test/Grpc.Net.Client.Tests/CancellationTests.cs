@@ -37,7 +37,7 @@ namespace Grpc.Net.Client.Tests
         {
             // Arrange
             var cts = new CancellationTokenSource();
-            var invoker = CreateTimedoutCallInvoker();
+            var invoker = CreateTimedoutCallInvoker<HelloRequest, HelloReply>();
 
             // Act
             var call = invoker.AsyncClientStreamingCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(cancellationToken: cts.Token));
@@ -58,7 +58,7 @@ namespace Grpc.Net.Client.Tests
         {
             // Arrange
             var cts = new CancellationTokenSource();
-            var invoker = CreateTimedoutCallInvoker();
+            var invoker = CreateTimedoutCallInvoker<HelloRequest, HelloReply>();
 
             // Act
             var call = invoker.AsyncClientStreamingCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(cancellationToken: cts.Token));
@@ -79,7 +79,7 @@ namespace Grpc.Net.Client.Tests
         {
             // Arrange
             var cts = new CancellationTokenSource();
-            var invoker = CreateTimedoutCallInvoker();
+            var invoker = CreateTimedoutCallInvoker<HelloRequest, HelloReply>();
 
             // Act
             var call = invoker.AsyncClientStreamingCall<HelloRequest, HelloReply>(ClientTestHelpers.ServiceMethod, string.Empty, new CallOptions(cancellationToken: cts.Token));
@@ -93,11 +93,13 @@ namespace Grpc.Net.Client.Tests
             Assert.AreEqual(StatusCode.Cancelled, call.GetStatus().StatusCode);
         }
 
-        private static HttpClientCallInvoker CreateTimedoutCallInvoker()
+        private static HttpClientCallInvoker CreateTimedoutCallInvoker<TRequest, TResponse>()
+            where TRequest : class
+            where TResponse : class
         {
             var httpClient = ClientTestHelpers.CreateTestClient(async request =>
             {
-                var content = (PushStreamContent)request.Content;
+                var content = (PushStreamContent<TRequest, TResponse>)request.Content;
                 await content.PushComplete.DefaultTimeout();
 
                 return ResponseUtils.CreateResponse(HttpStatusCode.OK);
