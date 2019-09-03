@@ -106,7 +106,7 @@ namespace Grpc.Net.Client.Internal
 
             var message = CreateHttpRequestMessage();
             SetMessageContent(request, message);
-            _ = StartAsync(message);
+            _ = RunCall(message);
         }
 
         public void StartClientStreaming()
@@ -115,7 +115,7 @@ namespace Grpc.Net.Client.Internal
 
             var message = CreateHttpRequestMessage();
             CreateWriter(message);
-            _ = StartAsync(message);
+            _ = RunCall(message);
         }
 
         public void StartServerStreaming(TRequest request)
@@ -123,7 +123,7 @@ namespace Grpc.Net.Client.Internal
             var message = CreateHttpRequestMessage();
             SetMessageContent(request, message);
             ClientStreamReader = new HttpContentClientStreamReader<TRequest, TResponse>(this);
-            _ = StartAsync(message);
+            _ = RunCall(message);
         }
 
         public void StartDuplexStreaming()
@@ -131,7 +131,7 @@ namespace Grpc.Net.Client.Internal
             var message = CreateHttpRequestMessage();
             CreateWriter(message);
             ClientStreamReader = new HttpContentClientStreamReader<TRequest, TResponse>(this);
-            _ = StartAsync(message);
+            _ = RunCall(message);
         }
 
         public void Dispose()
@@ -254,9 +254,6 @@ namespace Grpc.Net.Client.Internal
 
         private Status? ValidateHeaders(HttpResponseMessage httpResponse)
         {
-            // We don't want to throw in this method, even for non-success situations.
-            // Response is still needed to return headers in GetResponseHeadersAsync.
-
             Log.ResponseHeadersReceived(Logger);
 
             if (httpResponse.StatusCode != HttpStatusCode.OK)
@@ -276,6 +273,7 @@ namespace Grpc.Net.Client.Internal
             }
             else
             {
+                // gRPC status can be returned in the header when there is no message (e.g. unimplemented status)
                 if (TryGetStatusCore(httpResponse.Headers, out var status))
                 {
                     return status;
@@ -345,11 +343,11 @@ namespace Grpc.Net.Client.Internal
             return null;
         }
 
-        private async ValueTask StartAsync(HttpRequestMessage request)
+        private async ValueTask RunCall(HttpRequestMessage request)
         {
             using (StartScope())
             {
-                var (diagnosticSourceEnabled, activity) = SetupRequest(request);
+                var (diagnosticSourceEnabled, activity) = InitializeCall(request);
 
                 if (Options.Credentials != null || Channel.CallCredentials?.Count > 0)
                 {
@@ -381,8 +379,10 @@ namespace Grpc.Net.Client.Internal
 
                     if (_responseTcs != null)
                     {
+                        // Unary or client streaming call
                         if (status != null)
                         {
+                            // gRPC status in the header
                             if (status.Value.StatusCode != StatusCode.OK)
                             {
                                 _responseTcs.TrySetException(new RpcException(status.Value));
@@ -399,7 +399,7 @@ namespace Grpc.Net.Client.Internal
                         }
                         else
                         {
-                            // This is a unary or client stream calling. Process entire response body immediately.
+                            // Read entire response body immediately and read status from trailers
                             try
                             {
                                 // Trailers are only available once the response body had been read
@@ -432,39 +432,37 @@ namespace Grpc.Net.Client.Internal
                                     }
                                 }
                             }
-                            catch (RpcException ex)
-                            {
-                                status = ex.Status;
-                                _responseTcs.TrySetException(ex);
-                            }
                             catch (Exception ex)
                             {
-                                if (status == null)
+                                if (ex is RpcException rpcException)
+                                {
+                                    status = rpcException.Status;
+                                }
+                                else if (status == null)
                                 {
                                     status = new Status(StatusCode.Internal, ex.Message);
                                 }
 
                                 _responseTcs.TrySetException(ex);
-                            }
-                            finally
-                            {
                                 Cleanup(status!.Value);
                             }
                         }
                     }
                     else
                     {
+                        // Duplex or server streaming call
                         Debug.Assert(ClientStreamReader != null);
                         ClientStreamReader.SetHttpResponse(HttpResponse, status);
 
                         if (status != null)
                         {
+                            // gRPC status in the header
                             FinishResponse(status.Value);
                         }
                         else
                         {
-                            // This is a duplex or server streaming call. Wait until the call is complete.
-                            // TCS will be set in Dispose.
+                            // Wait until the response has been read and status read from trailers.
+                            // TCS will also be set in Dispose.
                             status = await CallTask.ConfigureAwait(false);
                         }
                     }
@@ -486,42 +484,7 @@ namespace Grpc.Net.Client.Internal
             }
         }
 
-        private void FinishCall(HttpRequestMessage request, bool diagnosticSourceEnabled, Activity? activity, Status? status)
-        {
-            if (status!.Value.StatusCode != StatusCode.OK)
-            {
-                Log.GrpcStatusError(Logger, status.Value.StatusCode, status.Value.Detail);
-                GrpcEventSource.Log.CallFailed(status.Value.StatusCode);
-            }
-            Log.FinishedCall(Logger);
-            GrpcEventSource.Log.CallStop();
-
-            // Activity needs to be stopped in the same execution context it was started
-            if (activity != null)
-            {
-                var statusText = status.Value.StatusCode.ToString("D");
-                if (statusText != null)
-                {
-                    activity.AddTag(GrpcDiagnostics.GrpcStatusCodeTagName, statusText);
-                }
-
-                if (diagnosticSourceEnabled)
-                {
-                    // Stop sets the end time if it was unset, but we want it set before we issue the write
-                    // so we do it now.   
-                    if (activity.Duration == TimeSpan.Zero)
-                    {
-                        activity.SetEndTime(DateTime.UtcNow);
-                    }
-
-                    GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, new { Request = request, Response = HttpResponse });
-                }
-
-                activity.Stop();
-            }
-        }
-
-        private (bool diagnosticSourceEnabled, Activity? activity) SetupRequest(HttpRequestMessage request)
+        private (bool diagnosticSourceEnabled, Activity? activity) InitializeCall(HttpRequestMessage request)
         {
             if (_timeout != null && !Channel.DisableClientDeadlineTimer)
             {
@@ -573,6 +536,41 @@ namespace Grpc.Net.Client.Internal
             return (diagnosticSourceEnabled, activity);
         }
 
+        private void FinishCall(HttpRequestMessage request, bool diagnosticSourceEnabled, Activity? activity, Status? status)
+        {
+            if (status!.Value.StatusCode != StatusCode.OK)
+            {
+                Log.GrpcStatusError(Logger, status.Value.StatusCode, status.Value.Detail);
+                GrpcEventSource.Log.CallFailed(status.Value.StatusCode);
+            }
+            Log.FinishedCall(Logger);
+            GrpcEventSource.Log.CallStop();
+
+            // Activity needs to be stopped in the same execution context it was started
+            if (activity != null)
+            {
+                var statusText = status.Value.StatusCode.ToString("D");
+                if (statusText != null)
+                {
+                    activity.AddTag(GrpcDiagnostics.GrpcStatusCodeTagName, statusText);
+                }
+
+                if (diagnosticSourceEnabled)
+                {
+                    // Stop sets the end time if it was unset, but we want it set before we issue the write
+                    // so we do it now.   
+                    if (activity.Duration == TimeSpan.Zero)
+                    {
+                        activity.SetEndTime(DateTime.UtcNow);
+                    }
+
+                    GrpcDiagnostics.DiagnosticListener.Write(GrpcDiagnostics.ActivityStopKey, new { Request = request, Response = HttpResponse });
+                }
+
+                activity.Stop();
+            }
+        }
+
         private async Task ReadCredentials(HttpRequestMessage request)
         {
             // In C-Core the call credential auth metadata is only applied if the channel is secure
@@ -584,13 +582,13 @@ namespace Grpc.Net.Client.Internal
 
                 if (Options.Credentials != null)
                 {
-                    await ReadCredentialMetadata(configurator, Channel, request, Options.Credentials).ConfigureAwait(false);
+                    await GrpcProtocolHelpers.ReadCredentialMetadata(configurator, Channel, request, Method, Options.Credentials).ConfigureAwait(false);
                 }
                 if (Channel.CallCredentials?.Count > 0)
                 {
                     foreach (var credentials in Channel.CallCredentials)
                     {
-                        await ReadCredentialMetadata(configurator, Channel, request, credentials).ConfigureAwait(false);
+                        await GrpcProtocolHelpers.ReadCredentialMetadata(configurator, Channel, request, Method, credentials).ConfigureAwait(false);
                     }
                 }
             }
@@ -598,58 +596,6 @@ namespace Grpc.Net.Client.Internal
             {
                 Log.CallCredentialsNotUsed(Logger);
             }
-        }
-
-        private async Task ReadCredentialMetadata(
-            DefaultCallCredentialsConfigurator configurator,
-            GrpcChannel channel,
-            HttpRequestMessage message,
-            CallCredentials credentials)
-        {
-            credentials.InternalPopulateConfiguration(configurator, null);
-
-            if (configurator.Interceptor != null)
-            {
-                var authInterceptorContext = CreateAuthInterceptorContext(channel.Address, Method);
-                var metadata = new Metadata();
-                await configurator.Interceptor(authInterceptorContext, metadata).ConfigureAwait(false);
-
-                foreach (var entry in metadata)
-                {
-                    AddHeader(message.Headers, entry);
-                }
-            }
-
-            if (configurator.Credentials != null)
-            {
-                // Copy credentials locally. ReadCredentialMetadata will update it.
-                var callCredentials = configurator.Credentials;
-                foreach (var c in callCredentials)
-                {
-                    configurator.Reset();
-                    await ReadCredentialMetadata(configurator, channel, message, c).ConfigureAwait(false);
-                }
-            }
-        }
-
-        private static AuthInterceptorContext CreateAuthInterceptorContext(Uri baseAddress, IMethod method)
-        {
-            var authority = baseAddress.Authority;
-            if (baseAddress.Scheme == Uri.UriSchemeHttps && authority.EndsWith(":443", StringComparison.Ordinal))
-            {
-                // The service URL can be used by auth libraries to construct the "aud" fields of the JWT token,
-                // so not producing serviceUrl compatible with other gRPC implementations can lead to auth failures.
-                // For https and the default port 443, the port suffix should be stripped.
-                // https://github.com/grpc/grpc/blob/39e982a263e5c48a650990743ed398c1c76db1ac/src/core/lib/security/transport/client_auth_filter.cc#L205
-                authority = authority.Substring(0, authority.Length - 4);
-            }
-            var serviceUrl = baseAddress.Scheme + "://" + authority + baseAddress.AbsolutePath;
-            if (!serviceUrl.EndsWith("/", StringComparison.Ordinal))
-            {
-                serviceUrl += "/";
-            }
-            serviceUrl += method.ServiceName;
-            return new AuthInterceptorContext(serviceUrl, method.Name);
         }
 
         private void CreateWriter(HttpRequestMessage message)
@@ -701,7 +647,7 @@ namespace Grpc.Net.Client.Internal
                     }
                     else
                     {
-                        AddHeader(message.Headers, entry);
+                        GrpcProtocolHelpers.AddHeader(message.Headers, entry);
                     }
                 }
             }
@@ -712,34 +658,6 @@ namespace Grpc.Net.Client.Internal
             }
 
             return message;
-        }
-
-        private static void AddHeader(HttpRequestHeaders headers, Metadata.Entry entry)
-        {
-            var value = entry.IsBinary ? Convert.ToBase64String(entry.ValueBytes) : entry.Value;
-            headers.Add(entry.Key, value);
-        }
-
-        private class DefaultCallCredentialsConfigurator : CallCredentialsConfiguratorBase
-        {
-            public AsyncAuthInterceptor? Interceptor { get; private set; }
-            public IReadOnlyList<CallCredentials>? Credentials { get; private set; }
-
-            public void Reset()
-            {
-                Interceptor = null;
-                Credentials = null;
-            }
-
-            public override void SetAsyncAuthInterceptorCredentials(object state, AsyncAuthInterceptor interceptor)
-            {
-                Interceptor = interceptor;
-            }
-
-            public override void SetCompositeCredentials(object state, IReadOnlyList<CallCredentials> credentials)
-            {
-                Credentials = credentials;
-            }
         }
 
         private void DeadlineExceeded(object state)
@@ -774,7 +692,7 @@ namespace Grpc.Net.Client.Internal
 
         private static bool TryGetStatusCore(HttpResponseHeaders headers, [NotNullWhen(true)]out Status? status)
         {
-            var grpcStatus = GetHeaderValue(headers, GrpcProtocolConstants.StatusTrailer);
+            var grpcStatus = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.StatusTrailer);
 
             // grpc-status is a required trailer
             if (grpcStatus == null)
@@ -791,7 +709,7 @@ namespace Grpc.Net.Client.Internal
 
             // grpc-message is optional
             // Always read the gRPC message from the same headers collection as the status
-            var grpcMessage = GetHeaderValue(headers, GrpcProtocolConstants.MessageTrailer);
+            var grpcMessage = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.MessageTrailer);
 
             if (!string.IsNullOrEmpty(grpcMessage))
             {
@@ -803,32 +721,6 @@ namespace Grpc.Net.Client.Internal
 
             status = new Status((StatusCode)statusValue, grpcMessage);
             return true;
-        }
-
-        private static string? GetHeaderValue(HttpHeaders? headers, string name)
-        {
-            if (headers == null)
-            {
-                return null;
-            }
-
-            if (!headers.TryGetValues(name, out var values))
-            {
-                return null;
-            }
-
-            // HttpHeaders appears to always return an array, but fallback to converting values to one just in case
-            var valuesArray = values as string[] ?? values.ToArray();
-
-            switch (valuesArray.Length)
-            {
-                case 0:
-                    return null;
-                case 1:
-                    return valuesArray[0];
-                default:
-                    throw new InvalidOperationException($"Multiple {name} headers.");
-            }
         }
 
         private void ValidateTrailersAvailable()
