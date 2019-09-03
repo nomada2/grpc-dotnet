@@ -17,13 +17,9 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using System.Linq;
 using System.Net;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
@@ -199,33 +195,14 @@ namespace Grpc.Net.Client.Internal
         /// <see cref="HttpContentClientStreamReader{TRequest,TResponse}.MoveNextCore(CancellationToken)"/>
         /// for server streaming and duplex streaming calls.
         /// </summary>
-        public Status FinishResponse(Status? status = null)
+        public void FinishResponse(Status status)
         {
             ResponseFinished = true;
-            Debug.Assert(HttpResponse != null);
-
-            if (status == null)
-            {
-                try
-                {
-                    if (!TryGetStatusCore(HttpResponse, out status))
-                    {
-                        status = new Status(StatusCode.Cancelled, "No grpc-status found on response.");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    // Handle error from parsing badly formed status
-                    status = new Status(StatusCode.Cancelled, ex.Message);
-                }
-            }
 
             // Clean up call resources once this call is finished
             // Call may not be explicitly disposed when used with unary methods
             // e.g. var reply = await client.SayHelloAsync(new HelloRequest());
-            Cleanup(status.Value);
-
-            return status.Value;
+            Cleanup(status);
         }
 
         public Task<Metadata> GetResponseHeadersAsync()
@@ -274,7 +251,7 @@ namespace Grpc.Net.Client.Internal
             else
             {
                 // gRPC status can be returned in the header when there is no message (e.g. unimplemented status)
-                if (TryGetStatusCore(httpResponse.Headers, out var status))
+                if (GrpcProtocolHelpers.TryGetStatusCore(httpResponse.Headers, out var status))
                 {
                     return status;
                 }
@@ -411,7 +388,8 @@ namespace Grpc.Net.Client.Internal
                                     Channel.ReceiveMaxMessageSize,
                                     Channel.CompressionProviders,
                                     _callCts.Token).ConfigureAwait(false);
-                                status = FinishResponse();
+                                status = GrpcProtocolHelpers.GetResponseStatus(HttpResponse);
+                                FinishResponse(status.Value);
 
                                 if (message == null)
                                 {
@@ -671,56 +649,6 @@ namespace Grpc.Net.Client.Internal
 
                 CancelCall(new Status(StatusCode.DeadlineExceeded, string.Empty));
             }
-        }
-
-        private static bool TryGetStatusCore(HttpResponseMessage httpResponseMessage, [NotNullWhen(true)]out Status? status)
-        {
-            if (TryGetStatusCore(httpResponseMessage.TrailingHeaders, out status))
-            {
-                return true;
-            }
-
-            // A gRPC server may return gRPC status in the headers when the response stream is empty
-            // For example, C Core server returns them together in the empty_stream interop test
-            if (TryGetStatusCore(httpResponseMessage.Headers, out status))
-            {
-                return true;
-            }
-
-            return false;
-        }
-
-        private static bool TryGetStatusCore(HttpResponseHeaders headers, [NotNullWhen(true)]out Status? status)
-        {
-            var grpcStatus = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.StatusTrailer);
-
-            // grpc-status is a required trailer
-            if (grpcStatus == null)
-            {
-                status = null;
-                return false;
-            }
-
-            int statusValue;
-            if (!int.TryParse(grpcStatus, out statusValue))
-            {
-                throw new InvalidOperationException("Unexpected grpc-status value: " + grpcStatus);
-            }
-
-            // grpc-message is optional
-            // Always read the gRPC message from the same headers collection as the status
-            var grpcMessage = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.MessageTrailer);
-
-            if (!string.IsNullOrEmpty(grpcMessage))
-            {
-                // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#responses
-                // The value portion of Status-Message is conceptually a Unicode string description of the error,
-                // physically encoded as UTF-8 followed by percent-encoding.
-                grpcMessage = Uri.UnescapeDataString(grpcMessage);
-            }
-
-            status = new Status((StatusCode)statusValue, grpcMessage);
-            return true;
         }
 
         private void ValidateTrailersAvailable()

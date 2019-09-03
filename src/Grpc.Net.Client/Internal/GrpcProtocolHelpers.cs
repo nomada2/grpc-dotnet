@@ -18,6 +18,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -324,6 +325,58 @@ namespace Grpc.Net.Client.Internal
                 default:
                     throw new InvalidOperationException($"Multiple {name} headers.");
             }
+        }
+
+        public static Status GetResponseStatus(HttpResponseMessage httpResponse)
+        {
+            Status? status;
+            try
+            {
+                if (!TryGetStatusCore(httpResponse.TrailingHeaders, out status))
+                {
+                    status = new Status(StatusCode.Cancelled, "No grpc-status found on response.");
+                }
+            }
+            catch (Exception ex)
+            {
+                // Handle error from parsing badly formed status
+                status = new Status(StatusCode.Cancelled, ex.Message);
+            }
+
+            return status.Value;
+        }
+
+        public static bool TryGetStatusCore(HttpResponseHeaders headers, [NotNullWhen(true)]out Status? status)
+        {
+            var grpcStatus = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.StatusTrailer);
+
+            // grpc-status is a required trailer
+            if (grpcStatus == null)
+            {
+                status = null;
+                return false;
+            }
+
+            int statusValue;
+            if (!int.TryParse(grpcStatus, out statusValue))
+            {
+                throw new InvalidOperationException("Unexpected grpc-status value: " + grpcStatus);
+            }
+
+            // grpc-message is optional
+            // Always read the gRPC message from the same headers collection as the status
+            var grpcMessage = GrpcProtocolHelpers.GetHeaderValue(headers, GrpcProtocolConstants.MessageTrailer);
+
+            if (!string.IsNullOrEmpty(grpcMessage))
+            {
+                // https://github.com/grpc/grpc/blob/master/doc/PROTOCOL-HTTP2.md#responses
+                // The value portion of Status-Message is conceptually a Unicode string description of the error,
+                // physically encoded as UTF-8 followed by percent-encoding.
+                grpcMessage = Uri.UnescapeDataString(grpcMessage);
+            }
+
+            status = new Status((StatusCode)statusValue, grpcMessage);
+            return true;
         }
     }
 }

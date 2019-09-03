@@ -172,7 +172,8 @@ namespace Grpc.Net.Client.Internal
                 if (Current == null)
                 {
                     // No more content in response so mark as finished
-                    var status = _call.FinishResponse();
+                    var status = GrpcProtocolHelpers.GetResponseStatus(_httpResponse);
+                    _call.FinishResponse(status);
                     if (status.StatusCode != StatusCode.OK)
                     {
                         throw new RpcException(status);
