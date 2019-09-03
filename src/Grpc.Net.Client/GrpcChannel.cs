@@ -37,6 +37,9 @@ namespace Grpc.Net.Client
     {
         internal const int DefaultMaxReceiveMessageSize = 1024 * 1024 * 4; // 4 MB
 
+        private readonly ConcurrentDictionary<IMethod, GrpcMethodInfo> _methodInfoCache;
+        private readonly Func<IMethod, GrpcMethodInfo> _createMethodInfoFunc;
+
         internal Uri Address { get; }
         internal HttpClient HttpClient { get; }
         internal int? SendMaxMessageSize { get; }
@@ -47,8 +50,6 @@ namespace Grpc.Net.Client
         internal string MessageAcceptEncoding { get; }
         internal ILoggerFactory LoggerFactory { get; }
         internal bool Disposed { get; private set; }
-        private ConcurrentDictionary<IMethod, GrpcMethodInfo> _methodInfoCache;
-
         // Timing related options that are set in unit tests
         internal ISystemClock Clock = SystemClock.Instance;
         internal bool DisableClientDeadlineTimer { get; set; }
@@ -71,6 +72,7 @@ namespace Grpc.Net.Client
             CompressionProviders = ResolveCompressionProviders(channelOptions.CompressionProviders);
             MessageAcceptEncoding = GrpcProtocolHelpers.GetMessageAcceptEncoding(CompressionProviders);
             LoggerFactory = channelOptions.LoggerFactory ?? NullLoggerFactory.Instance;
+            _createMethodInfoFunc = CreateMethodInfo;
 
             if (channelOptions.Credentials != null)
             {
@@ -86,7 +88,7 @@ namespace Grpc.Net.Client
 
         internal GrpcMethodInfo GrpcMethodInfo(IMethod method)
         {
-            return _methodInfoCache.GetOrAdd(method, CreateMethodInfo);
+            return _methodInfoCache.GetOrAdd(method, _createMethodInfoFunc);
         }
 
         private GrpcMethodInfo CreateMethodInfo(IMethod method)

@@ -67,8 +67,8 @@ namespace Grpc.Net.Client.Internal
             ValidateDeadline(options.Deadline);
 
             _callCts = new CancellationTokenSource();
-            _callTcs = new TaskCompletionSource<Status>(TaskContinuationOptions.RunContinuationsAsynchronously);
-            _metadataTcs = new TaskCompletionSource<Metadata>(TaskContinuationOptions.RunContinuationsAsynchronously);
+            _callTcs = new TaskCompletionSource<Status>(TaskCreationOptions.RunContinuationsAsynchronously);
+            _metadataTcs = new TaskCompletionSource<Metadata>(TaskCreationOptions.RunContinuationsAsynchronously);
             Method = method;
             _uri = uri;
             _logScope = logScope;
@@ -673,7 +673,7 @@ namespace Grpc.Net.Client.Internal
         private HttpRequestMessage CreateHttpRequestMessage()
         {
             var message = new HttpRequestMessage(HttpMethod.Post, _uri);
-            message.Version = new Version(2, 0);
+            message.Version = GrpcProtocolConstants.ProtocolVersion;
             // User agent is optional but recommended
             message.Headers.UserAgent.Add(GrpcProtocolConstants.UserAgentHeader);
             // TE is required by some servers, e.g. C Core
