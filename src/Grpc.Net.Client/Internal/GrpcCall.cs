@@ -67,7 +67,8 @@ namespace Grpc.Net.Client.Internal
             ValidateDeadline(options.Deadline);
 
             _callCts = new CancellationTokenSource();
-            _callTcs = new TaskCompletionSource<Status>(TaskCreationOptions.RunContinuationsAsynchronously);
+            // Run the callTcs continuation immediately to keep the same context. Required for Activity.
+            _callTcs = new TaskCompletionSource<Status>();
             _metadataTcs = new TaskCompletionSource<Metadata>(TaskCreationOptions.RunContinuationsAsynchronously);
             Method = method;
             _uri = uri;
@@ -302,7 +303,7 @@ namespace Grpc.Net.Client.Internal
 
         private void SetMessageContent(TRequest request, HttpRequestMessage message)
         {
-            message.Content = new PushOneContent<TRequest, TResponse>(
+            message.Content = new PushUnaryContent<TRequest, TResponse>(
                 request,
                 this,
                 GrpcProtocolHelpers.GetRequestEncoding(message.Headers),
