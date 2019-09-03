@@ -41,7 +41,6 @@ namespace Grpc.Net.Client.Internal
         private readonly CancellationTokenSource _callCts;
         private readonly TaskCompletionSource<Status> _callTcs;
         private readonly TaskCompletionSource<Metadata> _metadataTcs;
-        private TaskCompletionSource<TResponse>? _responseTcs;
         private readonly TimeSpan? _timeout;
         private readonly Uri _uri;
         private readonly GrpcCallScope _logScope;
@@ -56,8 +55,10 @@ namespace Grpc.Net.Client.Internal
         public CallOptions Options { get; }
         public Method<TRequest, TResponse> Method { get; }
         public GrpcChannel Channel { get; }
-
         public ILogger Logger { get; }
+
+        // These are set depending on the type of gRPC call
+        private TaskCompletionSource<TResponse>? _responseTcs;
         public HttpContentClientStreamWriter<TRequest, TResponse>? ClientStreamWriter { get; private set; }
         public HttpContentClientStreamReader<TRequest, TResponse>? ClientStreamReader { get; private set; }
 
