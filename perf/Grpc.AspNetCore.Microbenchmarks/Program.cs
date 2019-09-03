@@ -22,7 +22,7 @@ namespace Grpc.AspNetCore.Microbenchmarks
 {
     public class Program
     {
-#if !PROFILE
+#if PROFILE
         static void Main(string[] args)
         {
             BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
@@ -33,14 +33,14 @@ namespace Grpc.AspNetCore.Microbenchmarks
         {
             var benchmark = new Client.UnaryClientBenchmark();
             benchmark.GlobalSetup();
-            for (var i = 0; i < 100; i++)
+            for (var i = 0; i < 1000; i++)
             {
                 await benchmark.HandleCallAsync();
             }
 
             System.Console.WriteLine("Press any key to start.");
             System.Console.ReadKey();
-            for (var i = 0; i < 1; i++)
+            for (var i = 0; i < 10; i++)
             {
                 await benchmark.HandleCallAsync();
             }

@@ -268,7 +268,7 @@ namespace Grpc.Net.Client.Internal
                 return new Status(StatusCode.Cancelled, "Bad gRPC response. Response did not have a content-type header.");
             }
 
-            var grpcEncoding = httpResponse.Content.Headers.ContentType.ToString();
+            var grpcEncoding = httpResponse.Content.Headers.ContentType;
             if (!GrpcProtocolHelpers.IsGrpcContentType(grpcEncoding))
             {
                 return new Status(StatusCode.Cancelled, "Bad gRPC response. Invalid content-type value: " + grpcEncoding);

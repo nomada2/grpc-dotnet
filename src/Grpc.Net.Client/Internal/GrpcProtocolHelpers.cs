@@ -29,30 +29,26 @@ namespace Grpc.Net.Client.Internal
 {
     internal static class GrpcProtocolHelpers
     {
-        public static bool IsGrpcContentType(string contentType)
+        public static bool IsGrpcContentType(MediaTypeHeaderValue contentType)
         {
             if (contentType == null)
             {
                 return false;
             }
 
-            if (!contentType.StartsWith(GrpcProtocolConstants.GrpcContentType, StringComparison.OrdinalIgnoreCase))
+            if (!contentType.MediaType.StartsWith(GrpcProtocolConstants.GrpcContentType, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
-            if (contentType.Length == GrpcProtocolConstants.GrpcContentType.Length)
+            if (contentType.MediaType.Length == GrpcProtocolConstants.GrpcContentType.Length)
             {
                 // Exact match
                 return true;
             }
 
             // Support variations on the content-type (e.g. +proto, +json)
-            char nextChar = contentType[GrpcProtocolConstants.GrpcContentType.Length];
-            if (nextChar == ';')
-            {
-                return true;
-            }
+            var nextChar = contentType.MediaType[GrpcProtocolConstants.GrpcContentType.Length];
             if (nextChar == '+')
             {
                 // Accept any message format. Marshaller could be set to support third-party formats
