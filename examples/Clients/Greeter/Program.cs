@@ -30,7 +30,9 @@ namespace Sample.Clients
     {
         static async Task Main(string[] args)
         {
-            var channel = GrpcChannel.ForAddress("https://localhost:50051");
+            AppContext.SetSwitch("System.Net.Http.SocketsHttpHandler.Http2UnencryptedSupport", true);
+
+            var channel = GrpcChannel.ForAddress("http://localhost:50051");
             var client = new Greeter.GreeterClient(channel);
 
             await UnaryCallExample(client);
@@ -53,8 +55,7 @@ namespace Sample.Clients
             var cts = new CancellationTokenSource();
             cts.CancelAfter(TimeSpan.FromSeconds(3.5));
 
-            using (var call = client.SayHellos(new HelloRequest { Name = "GreeterClient" }, cancellationToken: cts.Token))
-            {
+            var call = client.SayHellos(new HelloRequest { Name = "GreeterClient" }, cancellationToken: cts.Token);
                 try
                 {
                     await foreach (var message in call.ResponseStream.ReadAllAsync())
@@ -66,7 +67,8 @@ namespace Sample.Clients
                 {
                     Console.WriteLine("Stream cancelled.");
                 }
-            }
+
+            await Task.Delay(TimeSpan.FromSeconds(20));
         }
     }
 }

@@ -37,13 +37,13 @@ namespace GRPCServer
                 {
                     options.ListenLocalhost(50051, listenOptions =>
                     {
-                        var basePath = Path.GetDirectoryName(typeof(Program).Assembly.Location);
-                        var certPath = Path.Combine(basePath!, "Certs", "server.pfx");
+                        //var basePath = Path.GetDirectoryName(typeof(Program).Assembly.Location);
+                        //var certPath = Path.Combine(basePath!, "Certs", "server.pfx");
 
-                        listenOptions.UseHttps(certPath, "1111", o =>
-                        {
-                            o.ClientCertificateMode = ClientCertificateMode.AllowCertificate;
-                        });
+                        //listenOptions.UseHttps(certPath, "1111", o =>
+                        //{
+                        //    o.ClientCertificateMode = ClientCertificateMode.AllowCertificate;
+                        //});
                         listenOptions.Protocols = HttpProtocols.Http2;
                     });
                 })

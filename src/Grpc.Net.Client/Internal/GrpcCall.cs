@@ -572,6 +572,8 @@ namespace Grpc.Net.Client.Internal
 
             try
             {
+                _callCts.Token.Register(() => Logger.LogInformation("SendAsync canceled!"));
+
                 HttpResponse = await Channel.HttpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, _callCts.Token).ConfigureAwait(false);
             }
             catch (Exception ex)
