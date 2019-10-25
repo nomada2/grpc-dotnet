@@ -21,6 +21,7 @@ using System.Threading.Tasks;
 using Test;
 using Grpc.Core;
 using NUnit.Framework;
+using System.Collections.Generic;
 
 namespace Tests.FunctionalTests
 {
@@ -95,6 +96,33 @@ namespace Tests.FunctionalTests
             // Assert
             Assert.IsTrue(hasMessages);
             Assert.IsTrue(callCancelled);
+        }
+
+        [Test]
+        public async Task SayHelloBidirectionStreamingTest()
+        {
+            // Arrange
+            var client = new Tester.TesterClient(Channel);
+
+            var names = new[] { "James" };
+            var messages = new List<string>();
+
+            // Act
+            using (var call = client.SayHelloBidirectionalStreaming())
+            {
+                foreach (var name in names)
+                {
+                    await call.RequestStream.WriteAsync(new HelloRequest { Name = name });
+                    //await call.RequestStream.CompleteAsync();
+
+                    Assert.IsTrue(await call.ResponseStream.MoveNext());
+                    messages.Add(call.ResponseStream.Current.Message);
+                }
+            }
+
+            // Assert
+            Assert.AreEqual(1, messages.Count);
+            Assert.AreEqual("Hello James", messages[0]);
         }
     }
 }
