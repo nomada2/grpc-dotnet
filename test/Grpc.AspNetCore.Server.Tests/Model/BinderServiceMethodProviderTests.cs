@@ -39,12 +39,12 @@ namespace Grpc.AspNetCore.Server.Tests.Model
         {
             // Arrange
             var services = new ServiceCollection();
+            services.AddSingleton<GreeterServiceWithDuplicateNames>();
 
             var serverCallHandlerFactory = new ServerCallHandlerFactory<GreeterServiceWithDuplicateNames>(
                 NullLoggerFactory.Instance,
                 Options.Create<GrpcServiceOptions>(new GrpcServiceOptions()),
                 Options.Create<GrpcServiceOptions<GreeterServiceWithDuplicateNames>>(new GrpcServiceOptions<GreeterServiceWithDuplicateNames>()),
-                new TestGrpcServiceActivator<GreeterServiceWithDuplicateNames>(),
                 services.BuildServiceProvider());
 
             var provider = new BinderServiceMethodProvider<GreeterServiceWithDuplicateNames>(NullLoggerFactory.Instance);
@@ -60,6 +60,7 @@ namespace Grpc.AspNetCore.Server.Tests.Model
             Assert.AreEqual("SayHello", methodModel.Method.Name);
 
             var httpContext = HttpContextHelpers.CreateContext();
+            httpContext.RequestServices = services.BuildServiceProvider();
 
             var ms = new MemoryStream();
             MessageHelpers.WriteMessage(ms, new HelloRequest

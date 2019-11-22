@@ -17,9 +17,11 @@
 #endregion
 
 using System.Collections.Generic;
+using Grpc.AspNetCore.Server.Model;
 using Grpc.AspNetCore.Server.Internal;
 using Grpc.AspNetCore.Server.Model.Internal;
 using Grpc.Core;
+using Microsoft.AspNetCore.Http;
 
 namespace Grpc.AspNetCore.Server.Model
 {
@@ -52,10 +54,19 @@ namespace Grpc.AspNetCore.Server.Model
             where TResponse : class
         {
             var callHandler = _serverCallHandlerFactory.CreateUnary<TRequest, TResponse>(method, invoker);
-            var methodModel = new MethodModel(method, metadata, callHandler.HandleCallAsync);
+            AddUnaryMethod(method, metadata, callHandler.HandleCallAsync);
+        }
 
+#pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
+        public void AddUnaryMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, IList<object> metadata, RequestDelegate invoker)
+#pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
+            where TRequest : class
+            where TResponse : class
+        {
+            var methodModel = new MethodModel(method, metadata, invoker);
             Methods.Add(methodModel);
         }
+
 
         /// <summary>
         /// Adds a server streaming method to a service.

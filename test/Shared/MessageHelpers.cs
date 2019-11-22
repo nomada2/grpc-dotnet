@@ -55,8 +55,6 @@ namespace Grpc.Tests.Shared
                 new GzipCompressionProvider(CompressionLevel.Fastest)
             };
 
-            var resolvedProviders = ResolveProviders(compressionProviders);
-
             var pipeReader = PipeReader.Create(stream);
 
             var httpContext = new DefaultHttpContext();
@@ -64,7 +62,7 @@ namespace Grpc.Tests.Shared
 
             var serverCallContext = HttpContextServerCallContextHelper.CreateServerCallContext(
                 httpContext: httpContext,
-                compressionProviders: resolvedProviders,
+                compressionProviders: compressionProviders,
                 responseCompressionAlgorithm: compressionEncoding);
 
             var message = await pipeReader.ReadSingleMessageAsync<T>(serverCallContext, Deserialize<T>).AsTask().DefaultTimeout();
@@ -86,14 +84,12 @@ namespace Grpc.Tests.Shared
                 new GzipCompressionProvider(CompressionLevel.Fastest)
             };
 
-            var resolvedProviders = ResolveProviders(compressionProviders);
-
             var httpContext = new DefaultHttpContext();
             httpContext.Request.Headers[GrpcProtocolConstants.MessageEncodingHeader] = compressionEncoding;
 
             var serverCallContext = HttpContextServerCallContextHelper.CreateServerCallContext(
                 httpContext: httpContext,
-                compressionProviders: resolvedProviders,
+                compressionProviders: compressionProviders,
                 responseCompressionAlgorithm: compressionEncoding);
 
             var message = await pipeReader.ReadStreamMessageAsync<T>(serverCallContext, Deserialize<T>).AsTask().DefaultTimeout();
@@ -108,8 +104,6 @@ namespace Grpc.Tests.Shared
                 new GzipCompressionProvider(CompressionLevel.Fastest)
             };
 
-            var resolvedProviders = ResolveProviders(compressionProviders);
-
             var pipeWriter = PipeWriter.Create(stream);
 
             var httpContext = new DefaultHttpContext();
@@ -117,7 +111,7 @@ namespace Grpc.Tests.Shared
 
             var serverCallContext = HttpContextServerCallContextHelper.CreateServerCallContext(
                 httpContext: httpContext,
-                compressionProviders: resolvedProviders,
+                compressionProviders: compressionProviders,
                 responseCompressionAlgorithm: compressionEncoding);
             serverCallContext.Initialize();
 
