@@ -22,6 +22,7 @@ using System.Diagnostics;
 using System.Net.Sockets;
 using System.Threading;
 using System.Threading.Tasks;
+using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Grpc.Shared;
 using Microsoft.AspNetCore.Http;

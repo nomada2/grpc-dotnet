@@ -39,89 +39,63 @@ namespace Grpc.AspNetCore.Server.Internal
         private readonly ILoggerFactory _loggerFactory;
         private readonly GrpcServiceOptions _globalOptions;
         private readonly GrpcServiceOptions<TService> _serviceOptions;
-        private readonly IGrpcServiceActivator<TService> _serviceActivator;
         private readonly IServiceProvider _serviceProvider;
 
         public ServerCallHandlerFactory(
             ILoggerFactory loggerFactory,
             IOptions<GrpcServiceOptions> globalOptions,
             IOptions<GrpcServiceOptions<TService>> serviceOptions,
-            IGrpcServiceActivator<TService> serviceActivator,
             IServiceProvider serviceProvider)
         {
             _loggerFactory = loggerFactory;
             _serviceOptions = serviceOptions.Value;
             _globalOptions = globalOptions.Value;
-            _serviceActivator = serviceActivator;
             _serviceProvider = serviceProvider;
         }
 
         private MethodContext CreateMethodContext<TRequest, TResponse>()
         {
-            // This is required to get ensure that service methods without any explicit configuration
-            // will continue to get the global configuration options
-            var resolvedCompressionProviders = new Dictionary<string, ICompressionProvider>(StringComparer.Ordinal);
-            AddCompressionProviders(resolvedCompressionProviders, _serviceOptions._compressionProviders);
-            AddCompressionProviders(resolvedCompressionProviders, _globalOptions._compressionProviders);
-
-            var interceptors = new InterceptorCollection();
-            interceptors.AddRange(_globalOptions.Interceptors);
-            interceptors.AddRange(_serviceOptions.Interceptors);
-
-            return new MethodContext
-            (
-                requestType: typeof(TRequest),
-                responseType: typeof(TResponse),
-                compressionProviders: resolvedCompressionProviders,
-                interceptors: interceptors,
-                maxSendMessageSize: _serviceOptions.MaxSendMessageSize ?? _globalOptions.MaxSendMessageSize,
-                maxReceiveMessageSize: _serviceOptions.MaxReceiveMessageSize ?? _globalOptions.MaxReceiveMessageSize,
-                enableDetailedErrors: _serviceOptions.EnableDetailedErrors ?? _globalOptions.EnableDetailedErrors,
-                responseCompressionAlgorithm: _serviceOptions.ResponseCompressionAlgorithm ?? _globalOptions.ResponseCompressionAlgorithm,
-                responseCompressionLevel: _serviceOptions.ResponseCompressionLevel ?? _globalOptions.ResponseCompressionLevel
-            );
-        }
-
-        private static void AddCompressionProviders(Dictionary<string, ICompressionProvider> resolvedProviders, IList<ICompressionProvider>? compressionProviders)
-        {
-            if (compressionProviders != null)
-            {
-                foreach (var compressionProvider in compressionProviders)
-                {
-                    if (!resolvedProviders.ContainsKey(compressionProvider.EncodingName))
-                    {
-                        resolvedProviders.Add(compressionProvider.EncodingName, compressionProvider);
-                    }
-                }
-            }
+            return MethodContext.Create<TRequest, TResponse>(new[] { _serviceOptions, _globalOptions });
         }
 
         public UnaryServerCallHandler<TService, TRequest, TResponse> CreateUnary<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TService, TRequest, TResponse> invoker)
             where TRequest : class
             where TResponse : class
         {
-            return new UnaryServerCallHandler<TService, TRequest, TResponse>(method, invoker, CreateMethodContext<TRequest, TResponse>(), _loggerFactory, _serviceActivator, _serviceProvider);
+            var methodContext = CreateMethodContext<TRequest, TResponse>();
+            var methodInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
+
+            return new UnaryServerCallHandler<TService, TRequest, TResponse>(methodInvoker, _loggerFactory);
         }
 
         public ClientStreamingServerCallHandler<TService, TRequest, TResponse> CreateClientStreaming<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TService, TRequest, TResponse> invoker)
             where TRequest : class
             where TResponse : class
         {
-            return new ClientStreamingServerCallHandler<TService, TRequest, TResponse>(method, invoker, CreateMethodContext<TRequest, TResponse>(), _loggerFactory, _serviceActivator, _serviceProvider);
+            var methodContext = CreateMethodContext<TRequest, TResponse>();
+            var methodInvoker = new ClientStreamingMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
+
+            return new ClientStreamingServerCallHandler<TService, TRequest, TResponse>(methodInvoker, _loggerFactory);
         }
 
         public DuplexStreamingServerCallHandler<TService, TRequest, TResponse> CreateDuplexStreaming<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TService, TRequest, TResponse> invoker)
             where TRequest : class
             where TResponse : class
         {
-            return new DuplexStreamingServerCallHandler<TService, TRequest, TResponse>(method, invoker, CreateMethodContext<TRequest, TResponse>(), _loggerFactory, _serviceActivator, _serviceProvider);
+            var methodContext = CreateMethodContext<TRequest, TResponse>();
+            var methodInvoker = new DuplexStreamingMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
+
+            return new DuplexStreamingServerCallHandler<TService, TRequest, TResponse>(methodInvoker, _loggerFactory);
         }
 
         public ServerStreamingServerCallHandler<TService, TRequest, TResponse> CreateServerStreaming<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TService, TRequest, TResponse> invoker)
             where TRequest : class
             where TResponse : class
         {
-            return new ServerStreamingServerCallHandler<TService, TRequest, TResponse>(method, invoker, CreateMethodContext<TRequest, TResponse>(), _loggerFactory, _serviceActivator, _serviceProvider);
+            var methodContext = CreateMethodContext<TRequest, TResponse>();
+            var methodInvoker = new ServerStreamingMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
+
+            return new ServerStreamingServerCallHandler<TService, TRequest, TResponse>(methodInvoker, _loggerFactory);
         }
 
         public RequestDelegate CreateUnimplementedMethod()

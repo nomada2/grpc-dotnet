@@ -29,6 +29,7 @@ using Grpc.AspNetCore.Microbenchmarks.Internal;
 using Grpc.AspNetCore.Server;
 using Grpc.AspNetCore.Server.Internal;
 using Grpc.AspNetCore.Server.Internal.CallHandlers;
+using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Grpc.Net.Compression;
 using Grpc.Tests.Shared;
@@ -52,7 +53,7 @@ namespace Grpc.AspNetCore.Microbenchmarks.Server
         private TestPipeReader? _requestPipe;
 
         protected InterceptorCollection? Interceptors { get; set; }
-        protected Dictionary<string, ICompressionProvider>? CompressionProviders { get; set; }
+        protected List<ICompressionProvider>? CompressionProviders { get; set; }
         protected string? ResponseCompressionAlgorithm { get; set; }
 
         [GlobalSetup]
@@ -77,15 +78,15 @@ namespace Grpc.AspNetCore.Microbenchmarks.Server
             var method = new Method<ChatMessage, ChatMessage>(MethodType.Unary, typeof(TestService).FullName, nameof(TestService.SayHello), marshaller, marshaller);
             var result = Task.FromResult(message);
             _callHandler = new UnaryServerCallHandler<TestService, ChatMessage, ChatMessage>(
-                method,
-                (service, request, context) => result,
-                HttpContextServerCallContextHelper.CreateMethodContext(
-                    compressionProviders: CompressionProviders,
-                    responseCompressionAlgorithm: ResponseCompressionAlgorithm,
-                    interceptors: Interceptors),
-                NullLoggerFactory.Instance,
-                new TestGrpcServiceActivator<TestService>(new TestService()),
-                serviceProvider);
+                new UnaryMethodInvoker<TestService, ChatMessage, ChatMessage>(
+                    method,
+                    (service, request, context) => result,
+                    HttpContextServerCallContextHelper.CreateMethodContext(
+                        compressionProviders: CompressionProviders,
+                        responseCompressionAlgorithm: ResponseCompressionAlgorithm,
+                        interceptors: Interceptors),
+                    serviceProvider),
+                NullLoggerFactory.Instance);
 
             _trailers = new HeaderDictionary();
 
