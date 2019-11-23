@@ -1,4 +1,4 @@
-#region Copyright notice and license
+﻿#region Copyright notice and license
 
 // Copyright 2019 The gRPC Authors
 //
@@ -17,32 +17,31 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Greet;
 using Grpc.Core;
-using Grpc.Net.Client;
+using Grpc.Reflection;
+using Grpc.Reflection.V1Alpha;
+using Grpc.Tests.Shared;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Routing;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Microsoft.Extensions.Options;
+using NUnit.Framework;
 
-namespace Client
+namespace Grpc.AspNetCore.Server.Tests.HttpApi
 {
-    public class Program
+    [TestFixture]
+    public class HttpApiProviderSeviceBinderTests
     {
-        static async Task Main(string[] args)
+        [Test]
+        public async Task Create_ConfiguredGrpcEndpoint_EndpointReturnedFromReflectionService()
         {
-            var channel = GrpcChannel.ForAddress("https://localhost:5001");
-            var client = new Greeter.GreeterClient(channel);
-
-            await UnaryCallExample(client);
-
-            Console.WriteLine("Shutting down");
-            Console.WriteLine("Press any key to exit...");
-            Console.ReadKey();
-        }
-
-        private static async Task UnaryCallExample(Greeter.GreeterClient client)
-        {
-            var reply = await client.SayHelloAsync(new HelloRequest { Name = "GreeterClient" });
-            Console.WriteLine("Greeting: " + reply.Message);
+            await Task.Yield();
         }
     }
 }

@@ -1,0 +1,27 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <Description>Automatic discovery of services for Grpc.Reflection</Description>
+    <PackageTags>gRPC RPC HTTP/2</PackageTags>
+    <NoWarn>NU1605</NoWarn>
+
+    <IsGrpcPublishedPackage>true</IsGrpcPublishedPackage>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <TargetFramework>netcoreapp3.0</TargetFramework>
+
+    <!-- Disable analysis for ConfigureAwait(false) -->
+    <WarningsNotAsErrors>$(WarningsNotAsErrors);CA2007</WarningsNotAsErrors>
+    <NoWarn>$(NoWarn);CA2007</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Google.Api.CommonProtos" Version="1.7.0" />
+    <PackageReference Include="Google.Protobuf" Version="$(GoogleProtobufPackageVersion)" />
+    <PackageReference Include="Grpc.Reflection" Version="$(GrpcPackageVersion)" />
+    <PackageReference Include="Google.Protobuf" Version="3.8.0" />
+
+    <ProjectReference Include="..\Grpc.AspNetCore.Server\Grpc.AspNetCore.Server.csproj" />
+  </ItemGroup>
+
+</Project>

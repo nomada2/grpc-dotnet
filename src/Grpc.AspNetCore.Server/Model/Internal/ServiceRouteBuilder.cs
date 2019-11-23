@@ -63,8 +63,9 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             {
                 foreach (var method in serviceMethodProviderContext.Methods)
                 {
-                    var pattern = method.Method.FullName;
-                    var endpointBuilder = endpointRouteBuilder.MapPost(pattern, method.RequestDelegate);
+                    var pattern = BuildPattern(method);
+
+                    var endpointBuilder = endpointRouteBuilder.Map(pattern, method.RequestDelegate);
 
                     endpointBuilder.Add(ep =>
                     {
@@ -96,6 +97,27 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             _serviceMethodsRegistry.Methods.AddRange(serviceMethodProviderContext.Methods);
 
             return endpointConventionBuilders;
+        }
+
+        private static string BuildPattern(MethodModel method)
+        {
+            // Support using just the service or method name to build the pattern.
+            // Used by HTTP API when a custom URL is specified.
+            var urlParts = new List<string>();
+            if (!string.IsNullOrEmpty(method.Method.ServiceName))
+            {
+                urlParts.Add(method.Method.ServiceName);
+            }
+            if (!string.IsNullOrEmpty(method.Method.Name))
+            {
+                urlParts.Add(method.Method.Name);
+            }
+            var pattern = string.Join('/', urlParts);
+            if (!pattern.StartsWith('/'))
+            {
+                pattern = "/" + pattern;
+            }
+            return pattern;
         }
 
         internal static void CreateUnimplementedEndpoints(
