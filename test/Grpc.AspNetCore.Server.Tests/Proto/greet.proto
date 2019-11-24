@@ -14,6 +14,8 @@
 
 syntax = "proto3";
 
+import "google/api/annotations.proto";
+
 package greet;
 
 service Greeter {
@@ -24,6 +26,36 @@ service Greeter {
 service SecondGreeter {
   rpc SayHello (HelloRequest) returns (HelloReply);
   rpc SayHellos (HelloRequest) returns (stream HelloReply);
+}
+
+service HttpApiGreeter {
+  rpc SayHello (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+    };
+  }
+  rpc Custom (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      custom: {
+        kind: "HEAD",
+        path: "/v1/greeter/{name}"
+      }
+    };
+  }
+  rpc AdditionalBindings (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/additional_bindings/{name}"
+      additional_bindings {
+        delete: "/v1/additional_bindings/{name}"
+      }
+    };
+  }
+  rpc NoOption (HelloRequest) returns (HelloReply);
+  rpc ServerStreamingGetOption (HelloRequest) returns (stream HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+    };
+  }
 }
 
 message HelloRequest {

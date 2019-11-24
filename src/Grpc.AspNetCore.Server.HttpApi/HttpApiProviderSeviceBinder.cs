@@ -87,14 +87,28 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
         {
-            if (TryGetHttpRule(method.Name, out var httpRule) &&
-                TryResolvePattern(httpRule, out var pattern, out var httpVerb))
+            if (TryGetHttpRule(method.Name, out var httpRule))
             {
-                AddMethodCore(method, pattern, httpVerb);
+                ProcessHttpRule(method, httpRule);
             }
             else
             {
                 AddMethodCore(method, method.FullName, "GET");
+            }
+        }
+
+        private void ProcessHttpRule<TRequest, TResponse>(Method<TRequest, TResponse> method, HttpRule httpRule)
+            where TRequest : class
+            where TResponse : class
+        {
+            if (TryResolvePattern(httpRule, out var pattern, out var httpVerb))
+            {
+                AddMethodCore(method, pattern, httpVerb);
+            }
+
+            foreach (var additionalRule in httpRule.AdditionalBindings)
+            {
+                ProcessHttpRule(method, additionalRule);
             }
         }
 
@@ -107,13 +121,12 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 new[] { typeof(TRequest), typeof(ServerCallContext) },
                 httpVerb);
 
-            var httpApiMethod = new Method<TRequest, TResponse>(method.Type, pattern, string.Empty, method.RequestMarshaller, method.ResponseMarshaller);
             var methodContext = MethodContext.Create<TRequest, TResponse>(new[] { _serviceOptions, _globalOptions });
 
-            var unaryInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(httpApiMethod, invoker, methodContext, _serviceProvider);
+            var unaryInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
             var unaryServerCallHandler = new UnaryServerCallHandler<TService, TRequest, TResponse>(unaryInvoker);
 
-            _context.AddUnaryMethod<TRequest, TResponse>(httpApiMethod, metadata, unaryServerCallHandler.HandleCallAsync);
+            _context.AddUnaryMethod<TRequest, TResponse>(method, pattern, metadata, unaryServerCallHandler.HandleCallAsync);
         }
 
         private bool TryGetHttpRule(string methodName, [NotNullWhen(true)]out HttpRule? httpRule)

@@ -25,17 +25,17 @@ namespace Grpc.AspNetCore.Server.Model.Internal
 {
     internal class MethodModel
     {
-        public MethodModel(IMethod method, IList<object> metadata, RequestDelegate requestDelegate)
+        public MethodModel(IMethod method, string pattern, IList<object> metadata, RequestDelegate requestDelegate)
         {
             Method = method;
+            Pattern = pattern;
             Metadata = metadata;
             RequestDelegate = requestDelegate;
         }
 
         public IMethod Method { get; }
-
+        public string Pattern { get; }
         public IList<object> Metadata { get; }
-
         public RequestDelegate RequestDelegate { get; }
     }
 }

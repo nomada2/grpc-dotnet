@@ -63,13 +63,11 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             {
                 foreach (var method in serviceMethodProviderContext.Methods)
                 {
-                    var pattern = BuildPattern(method);
-
-                    var endpointBuilder = endpointRouteBuilder.Map(pattern, method.RequestDelegate);
+                    var endpointBuilder = endpointRouteBuilder.Map(method.Pattern, method.RequestDelegate);
 
                     endpointBuilder.Add(ep =>
                     {
-                        ep.DisplayName = $"gRPC - {pattern}";
+                        ep.DisplayName = $"gRPC - {method.Pattern}";
 
                         ep.Metadata.Add(new GrpcMethodMetadata(typeof(TService), method.Method));
                         foreach (var item in method.Metadata)
@@ -80,7 +78,7 @@ namespace Grpc.AspNetCore.Server.Model.Internal
 
                     endpointConventionBuilders.Add(endpointBuilder);
 
-                    Log.AddedServiceMethod(_logger, method.Method.Name, method.Method.ServiceName, method.Method.Type, pattern);
+                    Log.AddedServiceMethod(_logger, method.Method.Name, method.Method.ServiceName, method.Method.Type, method.Pattern);
                 }
             }
             else
@@ -97,27 +95,6 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             _serviceMethodsRegistry.Methods.AddRange(serviceMethodProviderContext.Methods);
 
             return endpointConventionBuilders;
-        }
-
-        private static string BuildPattern(MethodModel method)
-        {
-            // Support using just the service or method name to build the pattern.
-            // Used by HTTP API when a custom URL is specified.
-            var urlParts = new List<string>();
-            if (!string.IsNullOrEmpty(method.Method.ServiceName))
-            {
-                urlParts.Add(method.Method.ServiceName);
-            }
-            if (!string.IsNullOrEmpty(method.Method.Name))
-            {
-                urlParts.Add(method.Method.Name);
-            }
-            var pattern = string.Join('/', urlParts);
-            if (!pattern.StartsWith('/'))
-            {
-                pattern = "/" + pattern;
-            }
-            return pattern;
         }
 
         internal static void CreateUnimplementedEndpoints(

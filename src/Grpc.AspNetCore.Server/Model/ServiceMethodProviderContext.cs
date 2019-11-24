@@ -54,16 +54,16 @@ namespace Grpc.AspNetCore.Server.Model
             where TResponse : class
         {
             var callHandler = _serverCallHandlerFactory.CreateUnary<TRequest, TResponse>(method, invoker);
-            AddUnaryMethod(method, metadata, callHandler.HandleCallAsync);
+            AddUnaryMethod(method, method.FullName, metadata, callHandler.HandleCallAsync);
         }
 
 #pragma warning disable CS1591 // Missing XML comment for publicly visible type or member
-        public void AddUnaryMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, IList<object> metadata, RequestDelegate invoker)
+        public void AddUnaryMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, string pattern, IList<object> metadata, RequestDelegate invoker)
 #pragma warning restore CS1591 // Missing XML comment for publicly visible type or member
             where TRequest : class
             where TResponse : class
         {
-            var methodModel = new MethodModel(method, metadata, invoker);
+            var methodModel = new MethodModel(method, pattern, metadata, invoker);
             Methods.Add(methodModel);
         }
 
@@ -81,7 +81,7 @@ namespace Grpc.AspNetCore.Server.Model
             where TResponse : class
         {
             var callHandler = _serverCallHandlerFactory.CreateServerStreaming<TRequest, TResponse>(method, invoker);
-            var methodModel = new MethodModel(method, metadata, callHandler.HandleCallAsync);
+            var methodModel = new MethodModel(method, method.FullName, metadata, callHandler.HandleCallAsync);
 
             Methods.Add(methodModel);
         }
@@ -99,7 +99,7 @@ namespace Grpc.AspNetCore.Server.Model
             where TResponse : class
         {
             var callHandler = _serverCallHandlerFactory.CreateClientStreaming<TRequest, TResponse>(method, invoker);
-            var methodModel = new MethodModel(method, metadata, callHandler.HandleCallAsync);
+            var methodModel = new MethodModel(method, method.FullName, metadata, callHandler.HandleCallAsync);
 
             Methods.Add(methodModel);
         }
@@ -117,7 +117,7 @@ namespace Grpc.AspNetCore.Server.Model
             where TResponse : class
         {
             var callHandler = _serverCallHandlerFactory.CreateDuplexStreaming<TRequest, TResponse>(method, invoker);
-            var methodModel = new MethodModel(method, metadata, callHandler.HandleCallAsync);
+            var methodModel = new MethodModel(method, method.FullName, metadata, callHandler.HandleCallAsync);
 
             Methods.Add(methodModel);
         }

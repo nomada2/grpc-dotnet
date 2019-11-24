@@ -20,6 +20,7 @@ using System;
 using System.IO;
 using System.Threading.Tasks;
 using Google.Protobuf;
+using Google.Protobuf.Reflection;
 using Grpc.AspNetCore.Server.Model;
 using Microsoft.AspNetCore.Http;
 
@@ -31,10 +32,14 @@ namespace Grpc.AspNetCore.Server.HttpApi
         where TResponse : class
     {
         private readonly UnaryMethodInvoker<TService, TRequest, TResponse> _unaryMethodInvoker;
+        private readonly FieldDescriptor? _responseBodyDescriptor;
 
-        public UnaryServerCallHandler(UnaryMethodInvoker<TService, TRequest, TResponse> unaryMethodInvoker)
+        public UnaryServerCallHandler(
+            UnaryMethodInvoker<TService, TRequest, TResponse> unaryMethodInvoker,
+            FieldDescriptor? responseBodyDescriptor)
         {
             _unaryMethodInvoker = unaryMethodInvoker;
+            _responseBodyDescriptor = responseBodyDescriptor;
         }
 
         public async Task HandleCallAsync(HttpContext httpContext)
@@ -48,14 +53,28 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 field.Accessor.SetValue(requestMessage, item.Value);
             }
 
-            var fields = requestMessage.Descriptor.Fields.InFieldNumberOrder();
-
-            //httpApiMethod.
-            //var request = (TRequest)JsonParser.Default.Parse(new StreamReader(context.Request.Body), methodDescriptor.InputType);
+            foreach (var item in httpContext.Request.Query)
+            {
+                var field = requestMessage.Descriptor.FindFieldByName(item.Key);
+                if (item.Value.Count == 1)
+                {
+                    field.Accessor.SetValue(requestMessage, item.Value[0]);
+                }
+                else
+                {
+                    throw new Exception("Handle binding to repeating items");
+                }
+            }
 
             var serverCallContext = new HttpApiServerCallContext();
 
             var response = await _unaryMethodInvoker.Invoke(httpContext, serverCallContext, request);
+            object responseBody = response;
+
+            if (_responseBodyDescriptor != null)
+            {
+                responseBody = _responseBodyDescriptor.Accessor.GetValue((IMessage)responseBody);
+            }
 
             httpContext.Response.StatusCode = StatusCodes.Status200OK;
             httpContext.Response.ContentType = "application/json";
@@ -63,7 +82,15 @@ namespace Grpc.AspNetCore.Server.HttpApi
             var ms = new MemoryStream();
             using (var writer = new StreamWriter(ms, leaveOpen: true))
             {
-                JsonFormatter.Default.Format((IMessage)response, writer);
+                if (responseBody is IMessage responseMessage)
+                {
+                    JsonFormatter.Default.Format(responseMessage, writer);
+                }
+                else
+                {
+                    JsonFormatter.Default.WriteValue(writer, responseBody);
+                }
+
                 writer.Flush();
             }
             ms.Seek(0, SeekOrigin.Begin);

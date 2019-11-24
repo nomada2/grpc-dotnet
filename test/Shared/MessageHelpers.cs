@@ -37,7 +37,9 @@ namespace Grpc.Tests.Shared
         public static readonly Marshaller<HelloRequest> HelloRequestMarshaller = Marshallers.Create<HelloRequest>(r => r.ToByteArray(), data => HelloRequest.Parser.ParseFrom(data));
         public static readonly Marshaller<HelloReply> HelloReplyMarshaller = Marshallers.Create<HelloReply>(r => r.ToByteArray(), data => HelloReply.Parser.ParseFrom(data));
 
-        public static readonly Method<HelloRequest, HelloReply> ServiceMethod = new Method<HelloRequest, HelloReply>(MethodType.Unary, "ServiceName", "MethodName", HelloRequestMarshaller, HelloReplyMarshaller);
+        public static readonly Method<HelloRequest, HelloReply> ServiceMethod = CreateServiceMethod("MethodName");
+
+        public static Method<HelloRequest, HelloReply> CreateServiceMethod(string methodName) =>new Method<HelloRequest, HelloReply>(MethodType.Unary, "ServiceName", methodName, HelloRequestMarshaller, HelloReplyMarshaller);
 
         private static readonly HttpContextServerCallContext TestServerCallContext = HttpContextServerCallContextHelper.CreateServerCallContext();
 
