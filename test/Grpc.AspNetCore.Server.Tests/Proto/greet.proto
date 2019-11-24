@@ -40,12 +40,6 @@ service HttpApiGreeter {
       response_body: "message"
     };
   }
-  rpc BadResponseBody (HelloRequest) returns (HelloReply) {
-    option (google.api.http) = {
-      get: "/v1/greeter/{name}"
-      response_body: "NoMatch"
-    };
-  }
   rpc Custom (HelloRequest) returns (HelloReply) {
     option (google.api.http) = {
       custom: {
@@ -66,6 +60,15 @@ service HttpApiGreeter {
   rpc ServerStreamingGetOption (HelloRequest) returns (stream HelloReply) {
     option (google.api.http) = {
       get: "/v1/greeter/{name}"
+    };
+  }
+}
+
+service HttpApiInvalidResponseBodyGreeter {
+  rpc BadResponseBody (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+      response_body: "NoMatch"
     };
   }
 }

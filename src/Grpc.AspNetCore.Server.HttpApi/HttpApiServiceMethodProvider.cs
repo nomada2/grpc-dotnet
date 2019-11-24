@@ -56,7 +56,16 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 // The second parameter is always the service base type
                 var serviceParameter = bindMethodInfo.GetParameters()[1];
 
-                var serviceDescriptor = GetServiceDescriptor(bindMethodInfo.DeclaringType!);
+                ServiceDescriptor? serviceDescriptor = null;
+                try
+                {
+                    serviceDescriptor = ServiceDescriptorHelpers.GetServiceDescriptor(bindMethodInfo.DeclaringType!);
+                }
+                catch (Exception ex)
+                {
+                    Log.ServiceDescriptorError(_logger, typeof(TService), ex);
+                }
+
                 if (serviceDescriptor != null)
                 {
                     var binder = new HttpApiProviderServiceBinder<TService>(
@@ -81,25 +90,6 @@ namespace Grpc.AspNetCore.Server.HttpApi
             else
             {
                 Log.BindMethodNotFound(_logger, typeof(TService));
-            }
-        }
-
-        private ServiceDescriptor? GetServiceDescriptor(Type serviceReflectionType)
-        {
-            try
-            {
-                var property = serviceReflectionType.GetProperty("Descriptor", BindingFlags.Public | BindingFlags.Static);
-                if (property != null)
-                {
-                    return (ServiceDescriptor?)property.GetValue(null);
-                }
-
-                throw new InvalidOperationException($"Get not find Descriptor property on {serviceReflectionType.Name}.");
-            }
-            catch (Exception ex)
-            {
-                Log.ServiceDescriptorError(_logger, typeof(TService), ex);
-                return null;
             }
         }
 
