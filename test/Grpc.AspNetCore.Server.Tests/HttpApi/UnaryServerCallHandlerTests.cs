@@ -17,7 +17,10 @@
 #endregion
 
 using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
 using System.Threading.Tasks;
+using Google.Protobuf.Reflection;
 using Greet;
 using Grpc.AspNetCore.Server.HttpApi;
 using Grpc.AspNetCore.Server.Model;
@@ -41,7 +44,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker = (s, r, c) =>
             {
                 request = r;
-                return Task.FromResult(new HelloReply());
+                return Task.FromResult(new HelloReply { Message = $"Hello {r.Name}" });
             };
 
             var unaryServerCallHandler = CreateCallHandler(invoker);
@@ -54,6 +57,37 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             // Assert
             Assert.IsNotNull(request);
             Assert.AreEqual("TestName!", request!.Name);
+
+            httpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var responseJson = JsonDocument.Parse(httpContext.Response.Body);
+            Assert.AreEqual("Hello TestName!", responseJson.RootElement.GetProperty("message").GetString());
+        }
+
+        [Test]
+        public async Task HandleCallAsync_ResponseBodySet_SetOnRequestMessage()
+        {
+            // Arrange
+            HelloRequest? request = null;
+            UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker = (s, r, c) =>
+            {
+                request = r;
+                return Task.FromResult(new HelloReply { Message = $"Hello {r.Name}" });
+            };
+
+            var unaryServerCallHandler = CreateCallHandler(invoker, HelloReply.Descriptor.FindFieldByNumber(HelloReply.MessageFieldNumber));
+            var httpContext = CreateHttpContext();
+            httpContext.Request.RouteValues["name"] = "TestName!";
+
+            // Act
+            await unaryServerCallHandler.HandleCallAsync(httpContext);
+
+            // Assert
+            Assert.IsNotNull(request);
+            Assert.AreEqual("TestName!", request!.Name);
+
+            httpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var responseJson = JsonDocument.Parse(httpContext.Response.Body);
+            Assert.AreEqual("Hello TestName!", responseJson.RootElement.GetString());
         }
 
         [Test]
@@ -89,10 +123,13 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var serviceProvider = serviceCollection.BuildServiceProvider();
             var httpContext = new DefaultHttpContext();
             httpContext.RequestServices = serviceProvider;
+            httpContext.Response.Body = new MemoryStream();
             return httpContext;
         }
 
-        private static UnaryServerCallHandler<HttpApiGreeterService, HelloRequest, HelloReply> CreateCallHandler(UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker)
+        private static UnaryServerCallHandler<HttpApiGreeterService, HelloRequest, HelloReply> CreateCallHandler(
+            UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker,
+            FieldDescriptor? responseBodyDescriptor = null)
         {
             var serviceCollection = new ServiceCollection();
             var serviceProvider = serviceCollection.BuildServiceProvider();
@@ -101,8 +138,8 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
                 invoker,
                 MethodContext.Create<HelloRequest, HelloReply>(new[] { new GrpcServiceOptions() }),
                 serviceProvider);
-            var unaryServerCallHandler = new UnaryServerCallHandler<HttpApiGreeterService, HelloRequest, HelloReply>(unaryServerCallInvoker);
-            return unaryServerCallHandler;
+            
+            return new UnaryServerCallHandler<HttpApiGreeterService, HelloRequest, HelloReply>(unaryServerCallInvoker, responseBodyDescriptor);
         }
 
         private class HttpApiGreeterService : HttpApiGreeter.HttpApiGreeterBase

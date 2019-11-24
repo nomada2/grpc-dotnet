@@ -112,6 +112,22 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             Assert.AreEqual("/ServiceName/NoOption", methodModel.Pattern);
         }
 
+        [Test]
+        public void AddMethod_BadResponseBody_ResolveMethod()
+        {
+            // Arrange
+            RunBinder<HttpApiGreeterService>(binder =>
+            {
+                // Act
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.BadResponseBody));
+                var ex = Assert.Throws<InvalidOperationException>(() => binder.AddMethod(method, DummyInvokeMethod));
+
+                // Assert
+                Assert.AreEqual("Error binding BadResponseBody on HttpApiGreeterService to HTTP API.", ex.Message);
+                Assert.AreEqual("Couldn't find matching field for response body 'NoMatch' on HelloReply.", ex.InnerException!.Message);
+            });
+        }
+
         private ServiceMethodProviderContext<TService> RunBinder<TService>(Action<HttpApiProviderServiceBinder<TService>> bind)
             where TService : class
         {

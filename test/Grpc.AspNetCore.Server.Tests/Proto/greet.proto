@@ -34,6 +34,18 @@ service HttpApiGreeter {
       get: "/v1/greeter/{name}"
     };
   }
+  rpc ResponseBody (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+      response_body: "message"
+    };
+  }
+  rpc BadResponseBody (HelloRequest) returns (HelloReply) {
+    option (google.api.http) = {
+      get: "/v1/greeter/{name}"
+      response_body: "NoMatch"
+    };
+  }
   rpc Custom (HelloRequest) returns (HelloReply) {
     option (google.api.http) = {
       custom: {

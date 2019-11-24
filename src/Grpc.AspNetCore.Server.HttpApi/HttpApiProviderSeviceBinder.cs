@@ -63,7 +63,8 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ClientStreamingServerMethod<TRequest, TResponse> handler)
         {
-            if (TryGetHttpRule(method.Name, out _))
+            if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
+                TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -71,7 +72,8 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, DuplexStreamingServerMethod<TRequest, TResponse> handler)
         {
-            if (TryGetHttpRule(method.Name, out _))
+            if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
+                TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -79,7 +81,8 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, ServerStreamingServerMethod<TRequest, TResponse> handler)
         {
-            if (TryGetHttpRule(method.Name, out _))
+            if (TryGetMethodDescriptor(method.Name, out var methodDescriptor) &&
+                TryGetHttpRule(methodDescriptor, out _))
             {
                 Log.StreamingMethodNotSupported(_logger, method.Name, typeof(TService));
             }
@@ -87,58 +90,86 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
         public override void AddMethod<TRequest, TResponse>(Method<TRequest, TResponse> method, UnaryServerMethod<TRequest, TResponse> handler)
         {
-            if (TryGetHttpRule(method.Name, out var httpRule))
+            if (TryGetMethodDescriptor(method.Name, out var methodDescriptor))
             {
-                ProcessHttpRule(method, httpRule);
+                if (TryGetHttpRule(methodDescriptor, out var httpRule))
+                {
+                    ProcessHttpRule(method, methodDescriptor, httpRule);
+                }
+                else
+                {
+                    AddMethodCore(method, method.FullName, "GET", string.Empty, methodDescriptor);
+                }
             }
             else
             {
-                AddMethodCore(method, method.FullName, "GET");
+                Log.MethodDescriptorNotFound(_logger, method.Name, typeof(TService));
             }
         }
 
-        private void ProcessHttpRule<TRequest, TResponse>(Method<TRequest, TResponse> method, HttpRule httpRule)
+        private void ProcessHttpRule<TRequest, TResponse>(Method<TRequest, TResponse> method, MethodDescriptor methodDescriptor, HttpRule httpRule)
             where TRequest : class
             where TResponse : class
         {
             if (TryResolvePattern(httpRule, out var pattern, out var httpVerb))
             {
-                AddMethodCore(method, pattern, httpVerb);
+                AddMethodCore(method, pattern, httpVerb, httpRule.ResponseBody, methodDescriptor);
             }
 
             foreach (var additionalRule in httpRule.AdditionalBindings)
             {
-                ProcessHttpRule(method, additionalRule);
+                ProcessHttpRule(method, methodDescriptor, additionalRule);
             }
         }
 
-        private void AddMethodCore<TRequest, TResponse>(Method<TRequest, TResponse> method, string pattern, string httpVerb)
+        private void AddMethodCore<TRequest, TResponse>(
+            Method<TRequest, TResponse> method,
+            string pattern,
+            string httpVerb,
+            string responseBody,
+            MethodDescriptor methodDescriptor)
             where TRequest : class
             where TResponse : class
         {
-            var (invoker, metadata) = CreateModelCore<UnaryServerMethod<TService, TRequest, TResponse>>(
-                method.Name,
-                new[] { typeof(TRequest), typeof(ServerCallContext) },
-                httpVerb);
+            try
+            {
+                var (invoker, metadata) = CreateModelCore<UnaryServerMethod<TService, TRequest, TResponse>>(
+                    method.Name,
+                    new[] { typeof(TRequest), typeof(ServerCallContext) },
+                    httpVerb);
 
-            var methodContext = MethodContext.Create<TRequest, TResponse>(new[] { _serviceOptions, _globalOptions });
+                var methodContext = MethodContext.Create<TRequest, TResponse>(new[] { _serviceOptions, _globalOptions });
 
-            var unaryInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
-            var unaryServerCallHandler = new UnaryServerCallHandler<TService, TRequest, TResponse>(unaryInvoker);
+                FieldDescriptor? responseBodyDescriptor = null;
+                if (!string.IsNullOrEmpty(responseBody))
+                {
+                    responseBodyDescriptor = methodDescriptor.OutputType.FindFieldByName(responseBody);
+                    if (responseBodyDescriptor == null)
+                    {
+                        throw new InvalidOperationException($"Couldn't find matching field for response body '{responseBody}' on {methodDescriptor.OutputType.Name}.");
+                    }
+                }
 
-            _context.AddUnaryMethod<TRequest, TResponse>(method, pattern, metadata, unaryServerCallHandler.HandleCallAsync);
+                var unaryInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
+                var unaryServerCallHandler = new UnaryServerCallHandler<TService, TRequest, TResponse>(unaryInvoker, responseBodyDescriptor);
+
+                _context.AddUnaryMethod<TRequest, TResponse>(method, pattern, metadata, unaryServerCallHandler.HandleCallAsync);
+            }
+            catch (Exception ex)
+            {
+                throw new InvalidOperationException($"Error binding {method.Name} on {typeof(TService).Name} to HTTP API.", ex);
+            }
         }
 
-        private bool TryGetHttpRule(string methodName, [NotNullWhen(true)]out HttpRule? httpRule)
+        private bool TryGetMethodDescriptor(string methodName, [NotNullWhen(true)]out MethodDescriptor? methodDescriptor)
         {
-            var methodDescriptor = _serviceDescriptor.Methods.SingleOrDefault(m => m.Name == methodName);
-            if (methodDescriptor != null)
-            {
-                return methodDescriptor.CustomOptions.TryGetMessage<HttpRule>(HttpRuleFieldId, out httpRule);
-            }
+            methodDescriptor = _serviceDescriptor.Methods.SingleOrDefault(m => m.Name == methodName);
+            return (methodDescriptor != null);
+        }
 
-            httpRule = null;
-            return false;
+        private bool TryGetHttpRule(MethodDescriptor methodDescriptor, [NotNullWhen(true)]out HttpRule? httpRule)
+        {
+            return methodDescriptor.CustomOptions.TryGetMessage<HttpRule>(HttpRuleFieldId, out httpRule);
         }
 
         private bool TryResolvePattern(HttpRule http, [NotNullWhen(true)]out string? pattern, [NotNullWhen(true)]out string? verb)
@@ -237,9 +268,17 @@ namespace Grpc.AspNetCore.Server.HttpApi
             private static readonly Action<ILogger, string, Type, Exception?> _streamingMethodNotSupported =
                 LoggerMessage.Define<string, Type>(LogLevel.Warning, new EventId(1, "StreamingMethodNotSupported"), "Unable to bind {MethodName} on {ServiceType} to HTTP API. Streaming methods are not supported.");
 
+            private static readonly Action<ILogger, string, Type, Exception?> _methodDescriptorNotFound =
+                LoggerMessage.Define<string, Type>(LogLevel.Warning, new EventId(2, "MethodDescriptorNotFound"), "Unable to find method descriptor for {MethodName} on {ServiceType}.");
+
             public static void StreamingMethodNotSupported(ILogger logger, string methodName, Type serviceType)
             {
                 _streamingMethodNotSupported(logger, methodName, serviceType, null);
+            }
+
+            public static void MethodDescriptorNotFound(ILogger logger, string methodName, Type serviceType)
+            {
+                _methodDescriptorNotFound(logger, methodName, serviceType, null);
             }
         }
     }
