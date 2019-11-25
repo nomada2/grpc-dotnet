@@ -6,6 +6,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <None Remove="Proto\httpapi.proto" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Protobuf Include="Proto\httpapi.proto" GrpcServices="Both" />
     <Protobuf Include="Proto\greet.proto" GrpcServices="Both" />
 
     <Compile Include="..\Shared\ActivityReplacer.cs" Link="Infrastructure\ActivityReplacer.cs" />

@@ -16,15 +16,9 @@
 
 #endregion
 
-using System.Linq;
-using Google.Api;
-using Greet;
-using Grpc.AspNetCore.Server.Model;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
-using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 
 namespace Server
@@ -38,10 +32,6 @@ namespace Server
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
-            var m = Greeter.Descriptor.Methods.ToList();
-            //AnnotationsReflection.Descriptor.
-            var success = m[0].CustomOptions.TryGetMessage<HttpRule>(72295728, out var http);
-
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
@@ -51,7 +41,6 @@ namespace Server
 
             app.UseEndpoints(endpoints =>
             {
-                endpoints.MapGet("/", context => context.Response.WriteAsync("hi"));
                 endpoints.MapGrpcService<GreeterService>();
             });
         }

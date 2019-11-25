@@ -16,7 +16,7 @@
 
 #endregion
 
-using Greet;
+using HttpApi;
 
 namespace Grpc.AspNetCore.Server.Tests.TestObjects
 {

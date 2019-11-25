@@ -26,6 +26,7 @@ using Google.Protobuf.Reflection;
 using Grpc.AspNetCore.Server.Model;
 using Grpc.Core;
 using Microsoft.AspNetCore.Routing;
+using Microsoft.AspNetCore.Routing.Patterns;
 using Microsoft.Extensions.Logging;
 
 namespace Grpc.AspNetCore.Server.HttpApi
@@ -98,7 +99,7 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 }
                 else
                 {
-                    AddMethodCore(method, method.FullName, "GET", string.Empty, methodDescriptor);
+                    AddMethodCore(method, method.FullName, "GET", string.Empty, string.Empty, methodDescriptor);
                 }
             }
             else
@@ -113,7 +114,7 @@ namespace Grpc.AspNetCore.Server.HttpApi
         {
             if (TryResolvePattern(httpRule, out var pattern, out var httpVerb))
             {
-                AddMethodCore(method, pattern, httpVerb, httpRule.ResponseBody, methodDescriptor);
+                AddMethodCore(method, pattern, httpVerb, httpRule.Body, httpRule.ResponseBody, methodDescriptor);
             }
 
             foreach (var additionalRule in httpRule.AdditionalBindings)
@@ -126,6 +127,7 @@ namespace Grpc.AspNetCore.Server.HttpApi
             Method<TRequest, TResponse> method,
             string pattern,
             string httpVerb,
+            string body,
             string responseBody,
             MethodDescriptor methodDescriptor)
             where TRequest : class
@@ -140,6 +142,27 @@ namespace Grpc.AspNetCore.Server.HttpApi
 
                 var methodContext = MethodContext.Create<TRequest, TResponse>(new[] { _serviceOptions, _globalOptions });
 
+                var routeParameterDescriptors = ResolveRouteParameterDescriptors(pattern, methodDescriptor.InputType);
+
+                MessageDescriptor? bodyDescriptor = null;
+                FieldDescriptor? bodyFieldDescriptor = null;
+                if (!string.IsNullOrEmpty(body))
+                {
+                    if (!string.Equals(body, "*", StringComparison.Ordinal))
+                    {
+                        bodyFieldDescriptor = methodDescriptor.InputType.FindFieldByName(body);
+                        if (bodyFieldDescriptor == null)
+                        {
+                            throw new InvalidOperationException($"Couldn't find matching field for body '{body}' on {methodDescriptor.InputType.Name}.");
+                        }
+                        bodyDescriptor = bodyFieldDescriptor.ContainingType;
+                    }
+                    else
+                    {
+                        bodyDescriptor = methodDescriptor.InputType;
+                    }
+                }
+
                 FieldDescriptor? responseBodyDescriptor = null;
                 if (!string.IsNullOrEmpty(responseBody))
                 {
@@ -151,7 +174,12 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 }
 
                 var unaryInvoker = new UnaryMethodInvoker<TService, TRequest, TResponse>(method, invoker, methodContext, _serviceProvider);
-                var unaryServerCallHandler = new UnaryServerCallHandler<TService, TRequest, TResponse>(unaryInvoker, responseBodyDescriptor);
+                var unaryServerCallHandler = new UnaryServerCallHandler<TService, TRequest, TResponse>(
+                    unaryInvoker,
+                    responseBodyDescriptor,
+                    bodyDescriptor,
+                    bodyFieldDescriptor,
+                    routeParameterDescriptors);
 
                 _context.AddUnaryMethod<TRequest, TResponse>(method, pattern, metadata, unaryServerCallHandler.HandleCallAsync);
             }
@@ -159,6 +187,25 @@ namespace Grpc.AspNetCore.Server.HttpApi
             {
                 throw new InvalidOperationException($"Error binding {method.Name} on {typeof(TService).Name} to HTTP API.", ex);
             }
+        }
+
+        private static List<FieldDescriptor> ResolveRouteParameterDescriptors(string pattern, MessageDescriptor messageDescriptor)
+        {
+            var routePattern = RoutePatternFactory.Parse(pattern);
+
+            var routeParameterDescriptors = new List<FieldDescriptor>();
+            foreach (var routeParamter in routePattern.Parameters)
+            {
+                var fieldDescriptor = messageDescriptor.FindFieldByName(routeParamter.Name);
+                if (fieldDescriptor == null)
+                {
+                    throw new InvalidOperationException($"Couldn't find matching field for route parameter '{routeParamter.Name}' on {messageDescriptor.Name}.");
+                }
+
+                routeParameterDescriptors.Add(fieldDescriptor);
+            }
+
+            return routeParameterDescriptors;
         }
 
         private bool TryGetMethodDescriptor(string methodName, [NotNullWhen(true)]out MethodDescriptor? methodDescriptor)

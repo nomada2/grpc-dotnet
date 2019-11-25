@@ -19,12 +19,12 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
-using Greet;
 using Grpc.AspNetCore.Server.HttpApi;
 using Grpc.AspNetCore.Server.Model;
 using Grpc.AspNetCore.Server.Tests.TestObjects;
 using Grpc.Core;
 using Grpc.Tests.Shared;
+using HttpApi;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,7 +43,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var context = RunBinder<HttpApiGreeterService>(binder =>
             {
                 // Act
-                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.SayHello));
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.SayHello), HelloRequest.Parser, HelloReply.Parser);
                 binder.AddMethod(method, DummyInvokeMethod);
             });
 
@@ -61,7 +61,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var context = RunBinder<HttpApiGreeterService>(binder =>
             {
                 // Act
-                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.Custom));
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.Custom), HelloRequest.Parser, HelloReply.Parser);
                 binder.AddMethod(method, DummyInvokeMethod);
             });
 
@@ -79,7 +79,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var context = RunBinder<HttpApiGreeterService>(binder =>
             {
                 // Act
-                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.AdditionalBindings));
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.AdditionalBindings), HelloRequest.Parser, HelloReply.Parser);
                 binder.AddMethod(method, DummyInvokeMethod);
             });
 
@@ -102,7 +102,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var context = RunBinder<HttpApiGreeterService>(binder =>
             {
                 // Act
-                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.NoOption));
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiGreeterService.NoOption), HelloRequest.Parser, HelloReply.Parser);
                 binder.AddMethod(method, DummyInvokeMethod);
             });
 
@@ -114,13 +114,13 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
         }
 
         [Test]
-        public void AddMethod_BadResponseBody_ResolveMethod()
+        public void AddMethod_BadResponseBody_ThrowError()
         {
             // Arrange
             RunBinder<HttpApiInvalidResponseBodyGreeterService>(binder =>
             {
                 // Act
-                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiInvalidResponseBodyGreeterService.BadResponseBody));
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiInvalidResponseBodyGreeterService.BadResponseBody), HelloRequest.Parser, HelloReply.Parser);
                 var ex = Assert.Throws<InvalidOperationException>(() => binder.AddMethod(method, DummyInvokeMethod));
 
                 // Assert
@@ -129,8 +129,23 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             });
         }
 
+        [Test]
+        public void AddMethod_BadBody_ThrowError()
+        {
+            // Arrange
+            RunBinder<HttpApiInvalidBodyGreeterService>(binder =>
+            {
+                // Act
+                var method = MessageHelpers.CreateServiceMethod(nameof(HttpApiInvalidBodyGreeterService.BadBody), HelloRequest.Parser, HelloReply.Parser);
+                var ex = Assert.Throws<InvalidOperationException>(() => binder.AddMethod(method, DummyInvokeMethod));
+
+                // Assert
+                Assert.AreEqual("Error binding BadBody on HttpApiInvalidBodyGreeterService to HTTP API.", ex.Message);
+                Assert.AreEqual("Couldn't find matching field for body 'NoMatch' on HelloRequest.", ex.InnerException!.Message);
+            });
+        }
+
         private ServiceMethodProviderContext<TService> RunBinder<TService>(
-            //Google.Protobuf.Reflection.ServiceDescriptor serviceDescriptor,
             Action<HttpApiProviderServiceBinder<TService>> bind)
             where TService : class
         {
@@ -148,7 +163,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
 
             var binder = new HttpApiProviderServiceBinder<TService>(
                 context,
-                typeof(TService).BaseType!, // TODO: Make parameter
+                typeof(TService).BaseType!,
                 serviceDescriptor,
                 new GrpcServiceOptions(),
                 new GrpcServiceOptions<TService>(),
