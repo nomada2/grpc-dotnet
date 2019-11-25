@@ -17,6 +17,7 @@
 #endregion
 
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Core;
@@ -37,6 +38,7 @@ namespace Grpc.AspNetCore.Server.HttpApi
         protected override Status StatusCore { get; set; }
         protected override WriteOptions WriteOptionsCore { get; set; }
         protected override AuthContext AuthContextCore { get; }
+        protected override IDictionary<object, object> UserStateCore => base.UserStateCore;
 
         protected override ContextPropagationToken CreatePropagationTokenCore(ContextPropagationOptions options)
         {

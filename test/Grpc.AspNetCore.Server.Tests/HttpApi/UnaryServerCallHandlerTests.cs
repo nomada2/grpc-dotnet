@@ -50,9 +50,14 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
                 return Task.FromResult(new HelloReply { Message = $"Hello {r.Name}" });
             };
 
-            var routeParameterDescriptors = new List<FieldDescriptor>
+            var routeParameterDescriptors = new Dictionary<string, List<FieldDescriptor>>
             {
-                HelloRequest.Descriptor.FindFieldByNumber(HelloRequest.NameFieldNumber)
+                ["name"] = new List<FieldDescriptor>(new[] { HelloRequest.Descriptor.FindFieldByNumber(HelloRequest.NameFieldNumber) }),
+                ["sub.subfield"] = new List<FieldDescriptor>(new[]
+                {
+                    HelloRequest.Descriptor.FindFieldByNumber(HelloRequest.SubFieldNumber),
+                    HelloRequest.Types.SubMessage.Descriptor.FindFieldByNumber(HelloRequest.Types.SubMessage.SubfieldFieldNumber)
+                })
             };
             var unaryServerCallHandler = CreateCallHandler(invoker, routeParameterDescriptors: routeParameterDescriptors);
             var httpContext = CreateHttpContext();
@@ -65,6 +70,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             // Assert
             Assert.IsNotNull(request);
             Assert.AreEqual("TestName!", request!.Name);
+            Assert.AreEqual("Subfield!", request!.Sub.Subfield);
 
             httpContext.Response.Body.Seek(0, SeekOrigin.Begin);
             using var responseJson = JsonDocument.Parse(httpContext.Response.Body);
@@ -82,9 +88,9 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
                 return Task.FromResult(new HelloReply { Message = $"Hello {r.Name}" });
             };
 
-            var routeParameterDescriptors = new List<FieldDescriptor>
+            var routeParameterDescriptors = new Dictionary<string, List<FieldDescriptor>>
             {
-                HelloRequest.Descriptor.FindFieldByNumber(HelloRequest.NameFieldNumber)
+                ["name"] = new List<FieldDescriptor>(new[] { HelloRequest.Descriptor.FindFieldByNumber(HelloRequest.NameFieldNumber) })
             };
             var unaryServerCallHandler = CreateCallHandler(
                 invoker,
@@ -106,6 +112,36 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
         }
 
         [Test]
+        public async Task HandleCallAsync_ResponseBodySetToRepeatedField_ArrayReturned()
+        {
+            // Arrange
+            HelloRequest? request = null;
+            UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker = (s, r, c) =>
+            {
+                request = r;
+                return Task.FromResult(new HelloReply { Values = { "One", "Two", "Three" } });
+            };
+
+            var unaryServerCallHandler = CreateCallHandler(
+                invoker,
+                HelloReply.Descriptor.FindFieldByNumber(HelloReply.ValuesFieldNumber));
+            var httpContext = CreateHttpContext();
+
+            // Act
+            await unaryServerCallHandler.HandleCallAsync(httpContext);
+
+            // Assert
+            Assert.IsNotNull(request);
+
+            httpContext.Response.Body.Seek(0, SeekOrigin.Begin);
+            using var responseJson = JsonDocument.Parse(httpContext.Response.Body);
+            Assert.AreEqual(JsonValueKind.Array, responseJson.RootElement.ValueKind);
+            Assert.AreEqual("One", responseJson.RootElement[0].GetString());
+            Assert.AreEqual("Two", responseJson.RootElement[1].GetString());
+            Assert.AreEqual("Three", responseJson.RootElement[2].GetString());
+        }
+
+        [Test]
         public async Task HandleCallAsync_RootBodySet_SetOnRequestMessage()
         {
             // Arrange
@@ -124,6 +160,11 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             {
                 Name = "TestName!"
             })));
+            httpContext.Request.Query = new QueryCollection(new Dictionary<string, StringValues>
+            {
+                ["name"] = "QueryStringTestName!",
+                ["sub.subfield"] = "QueryStringTestSubfield!"
+            });
 
             // Act
             await unaryServerCallHandler.HandleCallAsync(httpContext);
@@ -131,6 +172,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             // Assert
             Assert.IsNotNull(request);
             Assert.AreEqual("TestName!", request!.Name);
+            Assert.AreEqual(null, request!.Sub);
         }
 
         [Test]
@@ -153,13 +195,21 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             {
                 Subfield = "Subfield!"
             })));
+            httpContext.Request.Query = new QueryCollection(new Dictionary<string, StringValues>
+            {
+                ["name"] = "QueryStringTestName!",
+                ["sub.subfield"] = "QueryStringTestSubfield!",
+                ["sub.subfields"] = "QueryStringTestSubfields!"
+            });
 
             // Act
             await unaryServerCallHandler.HandleCallAsync(httpContext);
 
             // Assert
             Assert.IsNotNull(request);
+            Assert.AreEqual("QueryStringTestName!", request!.Name);
             Assert.AreEqual("Subfield!", request!.Sub.Subfield);
+            Assert.AreEqual(0, request!.Sub.Subfields.Count);
         }
 
         [Test]
@@ -274,6 +324,48 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             Assert.AreEqual(HelloRequest.Types.DataTypes.Types.NestedEnum.Foo, request!.Data.SingleEnum);
         }
 
+        [Test]
+        public async Task HandleCallAsync_Wrappers_SetOnRequestMessage()
+        {
+            // Arrange
+            HelloRequest? request = null;
+            UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker = (s, r, c) =>
+            {
+                request = r;
+                return Task.FromResult(new HelloReply());
+            };
+
+            var unaryServerCallHandler = CreateCallHandler(invoker);
+            var httpContext = CreateHttpContext();
+            httpContext.Request.Query = new QueryCollection(new Dictionary<string, StringValues>
+            {
+                ["wrappers.string_value.value"] = "1",
+                ["wrappers.int32_value.value"] = "2",
+                ["wrappers.int64_value.value"] = "3",
+                ["wrappers.float_value.value"] = "4.1",
+                ["wrappers.double_value.value"] = "5.1",
+                ["wrappers.bool_value.value"] = "true",
+                ["wrappers.uint32_value.value"] = "7",
+                ["wrappers.uint64_value.value"] = "8",
+                ["wrappers.bytes_value.value"] = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+            });
+
+            // Act
+            await unaryServerCallHandler.HandleCallAsync(httpContext);
+
+            // Assert
+            Assert.IsNotNull(request);
+            Assert.AreEqual("1", request!.Wrappers.StringValue);
+            Assert.AreEqual(2, request!.Wrappers.Int32Value);
+            Assert.AreEqual(3, request!.Wrappers.Int64Value);
+            Assert.AreEqual(4.1, request!.Wrappers.FloatValue, 0.001);
+            Assert.AreEqual(5.1, request!.Wrappers.DoubleValue, 0.001);
+            Assert.AreEqual(true, request!.Wrappers.BoolValue);
+            Assert.AreEqual(7, request!.Wrappers.Uint32Value);
+            Assert.AreEqual(8, request!.Wrappers.Uint64Value);
+            Assert.AreEqual(new byte[] { 1, 2, 3 }, request!.Wrappers.BytesValue.ToByteArray());
+        }
+
         private static DefaultHttpContext CreateHttpContext()
         {
             var serviceCollection = new ServiceCollection();
@@ -288,7 +380,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
         private static UnaryServerCallHandler<HttpApiGreeterService, HelloRequest, HelloReply> CreateCallHandler(
             UnaryServerMethod<HttpApiGreeterService, HelloRequest, HelloReply> invoker,
             FieldDescriptor? responseBodyDescriptor = null,
-            List<FieldDescriptor>? routeParameterDescriptors = null,
+            Dictionary<string, List<FieldDescriptor>>? routeParameterDescriptors = null,
             MessageDescriptor? bodyDescriptor = null,
             FieldDescriptor? bodyFieldDescriptor = null)
         {
@@ -305,7 +397,7 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
                 responseBodyDescriptor,
                 bodyDescriptor,
                 bodyFieldDescriptor,
-                routeParameterDescriptors ?? new List<FieldDescriptor>());
+                routeParameterDescriptors ?? new Dictionary<string, List<FieldDescriptor>>());
         }
 
         private class HttpApiGreeterService : HttpApiGreeter.HttpApiGreeterBase

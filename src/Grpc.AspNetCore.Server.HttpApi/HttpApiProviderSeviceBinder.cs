@@ -189,20 +189,19 @@ namespace Grpc.AspNetCore.Server.HttpApi
             }
         }
 
-        private static List<FieldDescriptor> ResolveRouteParameterDescriptors(string pattern, MessageDescriptor messageDescriptor)
+        private static Dictionary<string, List<FieldDescriptor>> ResolveRouteParameterDescriptors(string pattern, MessageDescriptor messageDescriptor)
         {
             var routePattern = RoutePatternFactory.Parse(pattern);
 
-            var routeParameterDescriptors = new List<FieldDescriptor>();
-            foreach (var routeParamter in routePattern.Parameters)
+            var routeParameterDescriptors = new Dictionary<string, List<FieldDescriptor>>(StringComparer.Ordinal);
+            foreach (var routeParameter in routePattern.Parameters)
             {
-                var fieldDescriptor = messageDescriptor.FindFieldByName(routeParamter.Name);
-                if (fieldDescriptor == null)
+                if (!ServiceDescriptorHelpers.TryResolveDescriptors(messageDescriptor, routeParameter.Name, out var fieldDescriptors))
                 {
-                    throw new InvalidOperationException($"Couldn't find matching field for route parameter '{routeParamter.Name}' on {messageDescriptor.Name}.");
+                    throw new InvalidOperationException($"Couldn't find matching field for route parameter '{routeParameter.Name}' on {messageDescriptor.Name}.");
                 }
 
-                routeParameterDescriptors.Add(fieldDescriptor);
+                routeParameterDescriptors.Add(routeParameter.Name, fieldDescriptors);
             }
 
             return routeParameterDescriptors;

@@ -15,6 +15,8 @@
 syntax = "proto3";
 
 import "google/api/annotations.proto";
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
 
 package http_api;
 
@@ -114,11 +116,24 @@ message HelloRequest {
     bytes single_bytes = 15;
     NestedEnum single_enum = 16;
   }
+  message Wrappers {
+    google.protobuf.StringValue string_value = 1;
+    google.protobuf.Int32Value int32_value = 2;
+    google.protobuf.Int64Value int64_value = 3;
+    google.protobuf.FloatValue float_value = 4;
+    google.protobuf.DoubleValue double_value = 5;
+    google.protobuf.BoolValue bool_value = 6;
+    google.protobuf.UInt32Value uint32_value = 7;
+    google.protobuf.UInt64Value uint64_value = 8;
+    google.protobuf.BytesValue bytes_value = 9;
+  }
   string name = 1;
   SubMessage sub = 2;
   DataTypes data = 3;
+  Wrappers wrappers = 4;
 }
 
 message HelloReply {
   string message = 1;
+  repeated string values = 2;
 }
