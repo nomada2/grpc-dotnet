@@ -339,15 +339,15 @@ namespace Grpc.AspNetCore.Server.Tests.HttpApi
             var httpContext = CreateHttpContext();
             httpContext.Request.Query = new QueryCollection(new Dictionary<string, StringValues>
             {
-                ["wrappers.string_value.value"] = "1",
-                ["wrappers.int32_value.value"] = "2",
-                ["wrappers.int64_value.value"] = "3",
-                ["wrappers.float_value.value"] = "4.1",
-                ["wrappers.double_value.value"] = "5.1",
-                ["wrappers.bool_value.value"] = "true",
-                ["wrappers.uint32_value.value"] = "7",
-                ["wrappers.uint64_value.value"] = "8",
-                ["wrappers.bytes_value.value"] = Convert.ToBase64String(new byte[] { 1, 2, 3 })
+                ["wrappers.string_value"] = "1",
+                ["wrappers.int32_value"] = "2",
+                ["wrappers.int64_value"] = "3",
+                ["wrappers.float_value"] = "4.1",
+                ["wrappers.double_value"] = "5.1",
+                ["wrappers.bool_value"] = "true",
+                ["wrappers.uint32_value"] = "7",
+                ["wrappers.uint64_value"] = "8",
+                ["wrappers.bytes_value"] = Convert.ToBase64String(new byte[] { 1, 2, 3 })
             });
 
             // Act

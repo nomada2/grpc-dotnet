@@ -79,11 +79,6 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 if (field.FieldType == FieldType.Message)
                 {
                     currentDescriptor = field.MessageType;
-
-                    if (IsWrapperType(currentDescriptor) && path.Equals("value", StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
                 }
                 else
                 {
@@ -199,25 +194,16 @@ namespace Grpc.AspNetCore.Server.HttpApi
                 }
                 else
                 {
-                    //if (IsWrapperType(field.MessageType))
-                    //{
-                    //    if (i == pathDescriptors.Count - 2)
-                    //    {
 
-                    //    }
-                    //}
-                    //else
+                    var fieldMessage = (IMessage)field.Accessor.GetValue(currentValue);
+
+                    if (fieldMessage == null)
                     {
-                        var fieldMessage = (IMessage)field.Accessor.GetValue(currentValue);
-
-                        if (fieldMessage == null)
-                        {
-                            fieldMessage = (IMessage)Activator.CreateInstance(field.MessageType.ClrType)!;
-                            field.Accessor.SetValue(currentValue, fieldMessage);
-                        }
-
-                        currentValue = fieldMessage;
+                        fieldMessage = (IMessage)Activator.CreateInstance(field.MessageType.ClrType)!;
+                        field.Accessor.SetValue(currentValue, fieldMessage);
                     }
+
+                    currentValue = fieldMessage;
                 }
             }
         }
