@@ -16,18 +16,16 @@
 
 #endregion
 
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using Grpc.AspNetCore.Server.Internal;
-
-namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
+namespace Grpc.AspNetCore.Web
 {
-    public class GrpcStreamContent : StreamContent
+    /// <summary>
+    /// 
+    /// </summary>
+    public interface IGrpcWebMetadata
     {
-        public GrpcStreamContent(Stream content, string contentType = GrpcProtocolConstants.GrpcContentType) : base(content)
-        {
-            Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        }
+        /// <summary>
+        /// 
+        /// </summary>
+        bool GrpcWebEnabled { get; }
     }
 }

@@ -20,27 +20,34 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Options;
 
 namespace Grpc.AspNetCore.Web.Internal
 {
     internal sealed class GrpcWebMiddleware
     {
+        private readonly GrpcWebOptions _options;
         private readonly RequestDelegate _next;
 
-        public GrpcWebMiddleware(RequestDelegate next)
+        public GrpcWebMiddleware(IOptions<GrpcWebOptions> options, RequestDelegate next)
         {
+            _options = options.Value;
             _next = next;
         }
 
         public Task Invoke(HttpContext httpContext)
         {
             var mode = GetGrpcWebMode(httpContext);
-            if (mode == GrpcWebMode.None)
+            if (mode != GrpcWebMode.None)
             {
-                return _next(httpContext);
+                var metadata = httpContext.GetEndpoint()?.Metadata.GetMetadata<IGrpcWebMetadata>();
+                if (metadata?.GrpcWebEnabled ?? _options.DefaultGrpcWebEnabled)
+                {
+                    return HandleGrpcWebRequest(httpContext, mode);
+                }
             }
 
-            return HandleGrpcWebRequest(httpContext, mode);
+            return _next(httpContext);
         }
 
         private async Task HandleGrpcWebRequest(HttpContext httpContext, GrpcWebMode mode)
@@ -56,15 +63,15 @@ namespace Grpc.AspNetCore.Web.Internal
             }
 
             // Modifying the request is required to stop Grpc.AspNetCore.Server from rejecting it
-            httpContext.Request.Protocol = GrpcProtocolConstants.Http2Protocol;
-            httpContext.Request.ContentType = GrpcProtocolConstants.GrpcContentType;
+            httpContext.Request.Protocol = GrpcWebProtocolConstants.Http2Protocol;
+            httpContext.Request.ContentType = GrpcWebProtocolConstants.GrpcContentType;
 
             // Update response content type back to gRPC-Web
             httpContext.Response.OnStarting(() =>
             {
                 var contentType = mode == GrpcWebMode.GrpcWeb
-                    ? GrpcProtocolConstants.GrpcWebContentType
-                    : GrpcProtocolConstants.GrpcWebTextContentType;
+                    ? GrpcWebProtocolConstants.GrpcWebContentType
+                    : GrpcWebProtocolConstants.GrpcWebTextContentType;
 
                 httpContext.Response.ContentType = contentType;
                 return Task.CompletedTask;
@@ -80,11 +87,11 @@ namespace Grpc.AspNetCore.Web.Internal
 
         private static GrpcWebMode GetGrpcWebMode(HttpContext httpContext)
         {
-            if (IsContentType(GrpcProtocolConstants.GrpcWebContentType, httpContext.Request.ContentType))
+            if (IsContentType(GrpcWebProtocolConstants.GrpcWebContentType, httpContext.Request.ContentType))
             {
                 return GrpcWebMode.GrpcWeb;
             }
-            else if (IsContentType(GrpcProtocolConstants.GrpcWebTextContentType, httpContext.Request.ContentType))
+            else if (IsContentType(GrpcWebProtocolConstants.GrpcWebTextContentType, httpContext.Request.ContentType))
             {
                 return GrpcWebMode.GrpcWebText;
             }

@@ -18,6 +18,7 @@
 
 using System;
 using Grpc.AspNetCore.Web.Internal;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Microsoft.AspNetCore.Builder
 {
@@ -38,7 +39,22 @@ namespace Microsoft.AspNetCore.Builder
                 throw new ArgumentNullException(nameof(builder));
             }
 
+            VerifyServicesRegistered(builder);
+
             return builder.UseMiddleware<GrpcWebMiddleware>();
+        }
+
+        private static void VerifyServicesRegistered(IApplicationBuilder app)
+        {
+            // Verify that AddGrpcWeb was called before calling UseGrpcWeb
+            // We use the GrpcWebMarkerService to ensure all the services were added.
+            if (app.ApplicationServices.GetService(typeof(GrpcWebMarkerService)) == null)
+            {
+                throw new InvalidOperationException(
+                    "Unable to find the required services. Please add all the required services by calling " +
+                    $"'{nameof(IServiceCollection)}.{nameof(GrpcWebServiceExtensions.AddGrpcWeb)}' inside the " +
+                    "call to 'ConfigureServices(...)' in the application startup code.");
+            }
         }
     }
 }

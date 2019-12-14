@@ -16,18 +16,9 @@
 
 #endregion
 
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using Grpc.AspNetCore.Server.Internal;
-
-namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
+namespace Grpc.AspNetCore.Web.Internal
 {
-    public class GrpcStreamContent : StreamContent
+    internal class GrpcWebMarkerService
     {
-        public GrpcStreamContent(Stream content, string contentType = GrpcProtocolConstants.GrpcContentType) : base(content)
-        {
-            Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        }
     }
 }

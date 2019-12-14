@@ -16,18 +16,19 @@
 
 #endregion
 
-using System.IO;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using Grpc.AspNetCore.Server.Internal;
+using System;
 
-namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
+namespace Grpc.AspNetCore.Web
 {
-    public class GrpcStreamContent : StreamContent
+    /// <summary>
+    /// 
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
+    public class DisableGrpcWebAttribute : Attribute, IGrpcWebMetadata
     {
-        public GrpcStreamContent(Stream content, string contentType = GrpcProtocolConstants.GrpcContentType) : base(content)
-        {
-            Headers.ContentType = new MediaTypeHeaderValue(contentType);
-        }
+        /// <summary>
+        /// 
+        /// </summary>
+        public bool GrpcWebEnabled => false;
     }
 }

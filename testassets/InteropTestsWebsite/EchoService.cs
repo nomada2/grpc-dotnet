@@ -16,13 +16,12 @@
 
 #endregion
 
-using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
 using Grpc.Core;
 using Grpc.Gateway.Testing;
 
-namespace FunctionalTestsWebsite.Services
+namespace Grpc.Testing
 {
     /// <summary>
     /// Written to as closely as possible mirror the behaviour of the C++ implementation in grpc/grpc-web:
@@ -43,9 +42,9 @@ namespace FunctionalTestsWebsite.Services
             throw new RpcException(new Status(StatusCode.Aborted, "Aborted from server side."));
         }
 
-        public override Task<Empty> NoOp(Empty request, ServerCallContext context)
+        public override Task<Gateway.Testing.Empty> NoOp(Gateway.Testing.Empty request, ServerCallContext context)
         {
-            return Task.FromResult(new Empty());
+            return Task.FromResult(new Gateway.Testing.Empty());
         }
 
         public override async Task ServerStreamingEcho(ServerStreamingEchoRequest request, IServerStreamWriter<ServerStreamingEchoResponse> responseStream, ServerCallContext context)
@@ -57,14 +56,7 @@ namespace FunctionalTestsWebsite.Services
                     Message = request.Message
                 });
 
-                try
-                {
-                    await Task.Delay(request.MessageInterval.ToTimeSpan(), context.CancellationToken);
-                }
-                catch (OperationCanceledException)
-                {
-                    return;
-                }
+                await Task.Delay(request.MessageInterval.ToTimeSpan());
             }
         }
 

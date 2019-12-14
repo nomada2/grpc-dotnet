@@ -53,6 +53,7 @@ namespace FunctionalTestsWebsite
                 {
                     options.ResponseCompressionAlgorithm = "gzip";
                 });
+            services.AddGrpcWeb();
             services.AddHttpContextAccessor();
 
             services
@@ -131,7 +132,7 @@ namespace FunctionalTestsWebsite
                 endpoints.MapGrpcService<GreeterService>();
                 endpoints.MapGrpcService<StreamService>();
                 endpoints.MapGrpcService<RacerService>();
-                endpoints.MapGrpcService<EchoService>();
+                endpoints.MapGrpcService<EchoService>().EnableGrpcWeb();
 
                 endpoints.DataSources.Add(endpoints.ServiceProvider.GetRequiredService<DynamicEndpointDataSource>());
 

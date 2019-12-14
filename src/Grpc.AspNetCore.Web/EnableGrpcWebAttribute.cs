@@ -17,16 +17,18 @@
 #endregion
 
 using System;
-using System.Collections.Generic;
-using Microsoft.Net.Http.Headers;
 
-namespace Grpc.AspNetCore.Web.Internal
+namespace Grpc.AspNetCore.Web
 {
-    internal static class GrpcProtocolConstants
+    /// <summary>
+    /// 
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
+    public class EnableGrpcWebAttribute : Attribute, IGrpcWebMetadata
     {
-        internal const string GrpcContentType = "application/grpc";
-        internal const string GrpcWebContentType = "application/grpc-web";
-        internal const string GrpcWebTextContentType = "application/grpc-web-text";
-        internal const string Http2Protocol = "HTTP/2";
+        /// <summary>
+        /// 
+        /// </summary>
+        public bool GrpcWebEnabled => true;
     }
 }
