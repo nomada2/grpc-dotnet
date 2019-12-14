@@ -114,6 +114,7 @@ namespace FunctionalTestsWebsite
             app.UseRouting();
 
             app.UseAuthorization();
+            app.UseGrpcWeb();
 
             app.UseEndpoints(endpoints =>
             {
@@ -130,6 +131,7 @@ namespace FunctionalTestsWebsite
                 endpoints.MapGrpcService<GreeterService>();
                 endpoints.MapGrpcService<StreamService>();
                 endpoints.MapGrpcService<RacerService>();
+                endpoints.MapGrpcService<EchoService>();
 
                 endpoints.DataSources.Add(endpoints.ServiceProvider.GetRequiredService<DynamicEndpointDataSource>());
 
