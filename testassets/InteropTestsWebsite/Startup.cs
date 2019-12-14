@@ -29,6 +29,7 @@ namespace InteropTestsWebsite
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddGrpc();
+            services.AddGrpcWeb();
             services.AddCors(o =>
             {
                 o.AddPolicy("InteropTests", builder =>
@@ -50,7 +51,7 @@ namespace InteropTestsWebsite
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapGrpcService<TestServiceImpl>();
-                endpoints.MapGrpcService<EchoService>().RequireCors("InteropTests");
+                endpoints.MapGrpcService<EchoService>().RequireCors("InteropTests").EnableGrpcWeb();
             });
         }
     }
