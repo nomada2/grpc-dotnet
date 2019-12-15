@@ -87,7 +87,9 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             metadata.AddRange(typeof(TService).GetCustomAttributes(inherit: true));
             // Add method metadata last so it has a higher priority
             metadata.AddRange(handlerMethod.GetCustomAttributes(inherit: true));
-            metadata.Add(new HttpMethodMetadata(new[] { "POST" }));
+
+            // TODO(JamesNK): Is it ok to always accept CORS preflight?
+            metadata.Add(new HttpMethodMetadata(new[] { "POST" }, acceptCorsPreflight: true));
 
             return (invoker, metadata);
         }

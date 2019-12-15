@@ -20,6 +20,7 @@ using System;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Http.Features;
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 namespace Grpc.AspNetCore.Web.Internal
@@ -27,11 +28,13 @@ namespace Grpc.AspNetCore.Web.Internal
     internal sealed class GrpcWebMiddleware
     {
         private readonly GrpcWebOptions _options;
+        private readonly ILogger<GrpcWebMiddleware> _logger;
         private readonly RequestDelegate _next;
 
-        public GrpcWebMiddleware(IOptions<GrpcWebOptions> options, RequestDelegate next)
+        public GrpcWebMiddleware(IOptions<GrpcWebOptions> options, ILogger<GrpcWebMiddleware> logger, RequestDelegate next)
         {
             _options = options.Value;
+            _logger = logger;
             _next = next;
         }
 
@@ -40,11 +43,15 @@ namespace Grpc.AspNetCore.Web.Internal
             var mode = GetGrpcWebMode(httpContext);
             if (mode != GrpcWebMode.None)
             {
-                var metadata = httpContext.GetEndpoint()?.Metadata.GetMetadata<IGrpcWebMetadata>();
-                if (metadata?.GrpcWebEnabled ?? _options.DefaultGrpcWebEnabled)
+                Log.DetectedGrpcWebRequest(_logger, httpContext.Request.ContentType);
+
+                var metadata = httpContext.GetEndpoint()?.Metadata.GetMetadata<IGrpcWebEnabledMetadata>();
+                if (metadata?.GrpcWebEnabled ?? _options.GrpcWebEnabled)
                 {
                     return HandleGrpcWebRequest(httpContext, mode);
                 }
+
+                Log.GrpcWebRequestNotProcessed(_logger);
             }
 
             return _next(httpContext);
@@ -64,7 +71,7 @@ namespace Grpc.AspNetCore.Web.Internal
 
             // Modifying the request is required to stop Grpc.AspNetCore.Server from rejecting it
             httpContext.Request.Protocol = GrpcWebProtocolConstants.Http2Protocol;
-            httpContext.Request.ContentType = GrpcWebProtocolConstants.GrpcContentType;
+            httpContext.Request.ContentType = ResolveContentType(GrpcWebProtocolConstants.GrpcContentType, httpContext.Request.ContentType);
 
             // Update response content type back to gRPC-Web
             httpContext.Response.OnStarting(() =>
@@ -72,8 +79,11 @@ namespace Grpc.AspNetCore.Web.Internal
                 var contentType = mode == GrpcWebMode.GrpcWeb
                     ? GrpcWebProtocolConstants.GrpcWebContentType
                     : GrpcWebProtocolConstants.GrpcWebTextContentType;
+                var responseContentType = ResolveContentType(contentType, httpContext.Response.ContentType);
 
-                httpContext.Response.ContentType = contentType;
+                httpContext.Response.ContentType = responseContentType;
+                Log.SendingGrpcWebResponse(_logger, responseContentType);
+                
                 return Task.CompletedTask;
             });
 
@@ -85,25 +95,32 @@ namespace Grpc.AspNetCore.Web.Internal
             }
         }
 
-        private static GrpcWebMode GetGrpcWebMode(HttpContext httpContext)
+        private static string ResolveContentType(string newContentType, string originalContentType)
         {
-            if (IsContentType(GrpcWebProtocolConstants.GrpcWebContentType, httpContext.Request.ContentType))
+            var contentSuffixIndex = originalContentType.IndexOf('+', StringComparison.Ordinal);
+            if (contentSuffixIndex != -1)
             {
-                return GrpcWebMode.GrpcWeb;
+                newContentType += originalContentType.Substring(contentSuffixIndex);
             }
-            else if (IsContentType(GrpcWebProtocolConstants.GrpcWebTextContentType, httpContext.Request.ContentType))
+
+            return newContentType;
+        }
+
+        internal static GrpcWebMode GetGrpcWebMode(HttpContext httpContext)
+        {
+            if (httpContext.Request.Method == HttpMethods.Post)
             {
-                return GrpcWebMode.GrpcWebText;
+                if (IsContentType(GrpcWebProtocolConstants.GrpcWebContentType, httpContext.Request.ContentType))
+                {
+                    return GrpcWebMode.GrpcWeb;
+                }
+                else if (IsContentType(GrpcWebProtocolConstants.GrpcWebTextContentType, httpContext.Request.ContentType))
+                {
+                    return GrpcWebMode.GrpcWebText;
+                }
             }
             
             return GrpcWebMode.None;
-        }
-
-        private enum GrpcWebMode
-        {
-            None,
-            GrpcWeb,
-            GrpcWebText
         }
 
         private static bool IsContentType(string contentType, string s)
@@ -137,6 +154,33 @@ namespace Grpc.AspNetCore.Web.Internal
             }
 
             return false;
+        }
+
+        private static class Log
+        {
+            private static readonly Action<ILogger, string, Exception?> _detectedGrpcWebRequest =
+                LoggerMessage.Define<string>(LogLevel.Debug, new EventId(1, "DetectedGrpcWebRequest"), "Detected gRPC-Web request from content-type '{ContentType}'.");
+
+            private static readonly Action<ILogger, Exception?> _grpcWebRequestNotProcessed =
+                LoggerMessage.Define(LogLevel.Debug, new EventId(2, "GrpcWebRequestNotProcessed"), "gRPC-Web request not processed.");
+
+            private static readonly Action<ILogger, string, Exception?> _sendingGrpcWebResponse =
+                LoggerMessage.Define<string>(LogLevel.Debug, new EventId(3, "SendingGrpcWebResponse"), "Sending gRPC-Web response with content-type '{ContentType}'.");
+
+            public static void DetectedGrpcWebRequest(ILogger<GrpcWebMiddleware> logger, string contentType)
+            {
+                _detectedGrpcWebRequest(logger, contentType, null);
+            }
+
+            public static void GrpcWebRequestNotProcessed(ILogger<GrpcWebMiddleware> logger)
+            {
+                _grpcWebRequestNotProcessed(logger, null);
+            }
+
+            public static void SendingGrpcWebResponse(ILogger<GrpcWebMiddleware> logger, string contentType)
+            {
+                _sendingGrpcWebResponse(logger, contentType, null);
+            }
         }
     }
 }

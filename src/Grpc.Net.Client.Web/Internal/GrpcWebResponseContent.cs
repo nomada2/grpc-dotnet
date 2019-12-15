@@ -54,7 +54,7 @@ namespace Grpc.Net.Client.Web.Internal
             var stream = await _inner.ReadAsStreamAsync().ConfigureAwait(false);
 
             //var ms = new MemoryStream();
-            //await stream.CopyToAsync(ms);
+            //await stream.CopyToAsync(ms).ConfigureAwait(false);
             //ms.Seek(0, SeekOrigin.Begin);
 
             //var data = ms.ToArray();

@@ -21,14 +21,11 @@ using System;
 namespace Grpc.AspNetCore.Web
 {
     /// <summary>
-    /// 
+    /// Identifies an endpoint that supports gRPC-Web.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-    public class EnableGrpcWebAttribute : Attribute, IGrpcWebMetadata
+    public class EnableGrpcWebAttribute : Attribute, IGrpcWebEnabledMetadata
     {
-        /// <summary>
-        /// 
-        /// </summary>
-        public bool GrpcWebEnabled => true;
+        bool IGrpcWebEnabledMetadata.GrpcWebEnabled => true;
     }
 }

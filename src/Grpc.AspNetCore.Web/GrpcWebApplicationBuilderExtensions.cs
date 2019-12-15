@@ -39,21 +39,20 @@ namespace Microsoft.AspNetCore.Builder
                 throw new ArgumentNullException(nameof(builder));
             }
 
-            VerifyServicesRegistered(builder);
+            ValidateServicesRegistered(builder.ApplicationServices);
 
             return builder.UseMiddleware<GrpcWebMiddleware>();
         }
 
-        private static void VerifyServicesRegistered(IApplicationBuilder app)
+        private static void ValidateServicesRegistered(IServiceProvider serviceProvider)
         {
             // Verify that AddGrpcWeb was called before calling UseGrpcWeb
             // We use the GrpcWebMarkerService to ensure all the services were added.
-            if (app.ApplicationServices.GetService(typeof(GrpcWebMarkerService)) == null)
+            var marker = serviceProvider.GetService(typeof(GrpcWebMarkerService));
+            if (marker == null)
             {
-                throw new InvalidOperationException(
-                    "Unable to find the required services. Please add all the required services by calling " +
-                    $"'{nameof(IServiceCollection)}.{nameof(GrpcWebServiceExtensions.AddGrpcWeb)}' inside the " +
-                    "call to 'ConfigureServices(...)' in the application startup code.");
+                throw new InvalidOperationException("Unable to find the required services. Please add all the required services by calling " +
+                    "'IServiceCollection.AddGrpcWeb' inside the call to 'ConfigureServices(...)' in the application startup code.");
             }
         }
     }

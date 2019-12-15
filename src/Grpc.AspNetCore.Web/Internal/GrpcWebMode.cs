@@ -16,16 +16,12 @@
 
 #endregion
 
-namespace Grpc.AspNetCore.Web
+namespace Grpc.AspNetCore.Web.Internal
 {
-    /// <summary>
-    /// 
-    /// </summary>
-    public interface IGrpcWebMetadata
+    internal enum GrpcWebMode
     {
-        /// <summary>
-        /// 
-        /// </summary>
-        bool GrpcWebEnabled { get; }
+        None,
+        GrpcWeb,
+        GrpcWebText
     }
 }

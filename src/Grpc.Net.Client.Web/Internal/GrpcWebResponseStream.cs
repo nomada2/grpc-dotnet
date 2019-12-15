@@ -73,7 +73,8 @@ namespace Grpc.Net.Client.Web.Internal
                         return await ParseTrailer();
                     }
 
-                    _state = ResponseState.Content;
+                    // If there is no content then state is still ready
+                    _state = _contentRemaining > 0 ? ResponseState.Content : ResponseState.Ready;
                     return 5;
                 case ResponseState.Content:
                     if (_contentRemaining > data.Length)

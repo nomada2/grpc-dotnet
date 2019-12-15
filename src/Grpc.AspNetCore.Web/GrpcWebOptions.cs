@@ -19,13 +19,13 @@
 namespace Grpc.AspNetCore.Web
 {
     /// <summary>
-    /// 
+    /// Provides programmatic configuration for gRPC-Web.
     /// </summary>
     public class GrpcWebOptions
     {
         /// <summary>
-        /// 
+        /// Gets or sets a flag indicating whether gRPC-Web is enabled by default.
         /// </summary>
-        public bool DefaultGrpcWebEnabled { get; set; }
+        public bool GrpcWebEnabled { get; set; }
     }
 }
