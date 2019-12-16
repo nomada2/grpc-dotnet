@@ -62,25 +62,34 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
 
         public HttpClient CreateClient(TestServerEndpointName? endpointName = null, DelegatingHandler? messageHandler = null)
         {
+            endpointName ??= TestServerEndpointName.Http2;
+
             var httpClientHandler = new HttpClientHandler();
             httpClientHandler.ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+
+#if GrpcWebTests
+            // Run all functional tests with gRPC-Web
+            var grpcWebMode = GrpcWebMode.GrpcWebText;
+            if (messageHandler != null)
+            {
+                messageHandler.InnerHandler = new GrpcWebHandler(grpcWebMode);
+            }
+            else
+            {
+                messageHandler = new GrpcWebHandler(grpcWebMode);
+            }
+#endif
 
             HttpClient client;
             if (messageHandler != null)
             {
                 messageHandler.InnerHandler = httpClientHandler;
-                //var webHandler = new GrpcWebHandler(GrpcWebMode.GrpcWebText);
-                //webHandler.InnerHandler = messageHandler;
                 client = new HttpClient(messageHandler);
             }
             else
             {
-                //var webHandler = new GrpcWebHandler(GrpcWebMode.GrpcWebText);
-                //webHandler.InnerHandler = httpClientHandler;
                 client = new HttpClient(httpClientHandler);
             }
-
-            endpointName ??= TestServerEndpointName.Http2;
 
             switch (endpointName)
             {

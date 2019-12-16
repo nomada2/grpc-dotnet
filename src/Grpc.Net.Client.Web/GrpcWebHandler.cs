@@ -36,14 +36,15 @@ namespace Grpc.Net.Client.Web
     public sealed class GrpcWebHandler : DelegatingHandler
     {
         private readonly GrpcWebMode _mode;
-        private readonly Version _httpVersion;
+        private readonly Version? _httpVersion;
 
         /// <summary>
         /// Creates a new instance of <see cref="GrpcWebHandler"/>.
         /// </summary>
         /// <param name="mode">The gRPC-Web mode to use when making gRPC-Web calls.</param>
-        public GrpcWebHandler(GrpcWebMode mode) : this(mode, GrpcWebProtocolConstants.Http20)
+        public GrpcWebHandler(GrpcWebMode mode)
         {
+            _mode = mode;
         }
 
         /// <summary>
@@ -81,11 +82,15 @@ namespace Grpc.Net.Client.Web
         private async Task<HttpResponseMessage> SendAsyncCore(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             request.Content = new GrpcWebRequestContent(request.Content, _mode);
-            request.Version = _httpVersion;
+            if (_httpVersion != null)
+            {
+                request.Version = _httpVersion;
+            }
 
             var response = await base.SendAsync(request, cancellationToken).ConfigureAwait(false);
 
             response.Content = new GrpcWebResponseContent(response.Content, _mode, response);
+            // The gRPC client validates HTTP version 2.0
             response.Version = GrpcWebProtocolConstants.Http20;
 
             return response;

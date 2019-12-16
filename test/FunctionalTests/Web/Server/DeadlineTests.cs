@@ -84,14 +84,18 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Server
             static async Task WriteUntilError(HelloRequest request, IServerStreamWriter<HelloReply> responseStream, ServerCallContext context)
             {
                 var i = 0;
-                while (true)
-                {
-                    var message = $"How are you {request.Name}? {i}";
-                    await responseStream.WriteAsync(new HelloReply { Message = message }).DefaultTimeout();
-                    i++;
+                var message = $"How are you {request.Name}? {i}";
+                await responseStream.WriteAsync(new HelloReply { Message = message }).DefaultTimeout();
 
-                    await Task.Delay(10);
+                i++;
+
+                while (!context.CancellationToken.IsCancellationRequested)
+                {
+                    await Task.Delay(50);
                 }
+
+                message = $"How are you {request.Name}? {i}";
+                await responseStream.WriteAsync(new HelloReply { Message = message }).DefaultTimeout();
             }
 
             // Arrange

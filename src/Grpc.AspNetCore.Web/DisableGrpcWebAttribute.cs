@@ -24,7 +24,7 @@ namespace Grpc.AspNetCore.Web
     /// Identifies an endpoint that doesn't support gRPC-Web.
     /// </summary>
     [AttributeUsage(AttributeTargets.Class | AttributeTargets.Method, AllowMultiple = true)]
-    public class DisableGrpcWebAttribute : Attribute, IGrpcWebEnabledMetadata
+    public sealed class DisableGrpcWebAttribute : Attribute, IGrpcWebEnabledMetadata
     {
         bool IGrpcWebEnabledMetadata.GrpcWebEnabled => false;
     }

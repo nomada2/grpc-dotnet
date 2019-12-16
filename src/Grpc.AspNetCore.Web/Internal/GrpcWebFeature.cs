@@ -64,6 +64,10 @@ namespace Grpc.AspNetCore.Web.Internal
 
         public async Task CompleteAsync()
         {
+            // TODO(JamesNK): When CompleteAsync is called from another thread (e.g. deadline exceeded),
+            // there is the potential for the main thread and CompleteAsync to both be writing to the response.
+            // Shouldn't matter to the client because it will have already thrown deadline exceeded error, but
+            // the response could return badly formatted trailers.
             await WriteTrailers();
             await _initialResponseFeature.CompleteAsync();
             _isComplete = true;
