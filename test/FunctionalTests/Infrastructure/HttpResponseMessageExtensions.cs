@@ -64,7 +64,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
                 statusHeadersCollection = response.Headers;
                 if (statusString == null)
                 {
-                    Assert.Fail($"Count not get {GrpcProtocolConstants.StatusTrailer} from response.");
+                    Assert.Fail($"Could not get {GrpcProtocolConstants.StatusTrailer} from response.");
                 }
             }
 

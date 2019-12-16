@@ -17,9 +17,11 @@
 #endregion
 
 using System;
+using System.Buffers.Binary;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
@@ -31,6 +33,66 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
     [TestFixture]
     public class Base64ResponseStreamTests
     {
+        [Test]
+        public async Task ReadAsync_ReadLargeData_Success()
+        {
+            // Arrange
+            var headerData = new byte[] { 0, 0, 1, 0, 4 };
+            var length = 65540;
+            var content = CreateTestData(length);
+
+            var messageContent = Encoding.UTF8.GetBytes(Convert.ToBase64String(headerData.Concat(content).ToArray()));
+            var messageCount = 3;
+
+            var streamContent = new List<byte>();
+            for (int i = 0; i < messageCount; i++)
+            {
+                streamContent.AddRange(messageContent);
+            }
+
+            var ms = new LimitedReadMemoryStream(streamContent.ToArray(), 3);
+            var base64Stream = new Base64ResponseStream(ms);
+
+            for (int i = 0; i < messageCount; i++)
+            {
+                // Assert 1
+                var resolvedHeaderData = await ReadContent(base64Stream, 5, CancellationToken.None);
+                // Act 1
+                CollectionAssert.AreEqual(headerData, resolvedHeaderData);
+
+                // Assert 2
+                var resolvedContentData = await ReadContent(base64Stream, (uint)length, CancellationToken.None);
+                // Act 2
+                CollectionAssert.AreEqual(content, resolvedContentData);
+            }
+        }
+
+        private class LimitedReadMemoryStream : MemoryStream
+        {
+            private readonly int _maxReadLength;
+
+            public LimitedReadMemoryStream(byte[] buffer, int maxReadLength) : base(buffer)
+            {
+                _maxReadLength = maxReadLength;
+            }
+
+            public override ValueTask<int> ReadAsync(Memory<byte> destination, CancellationToken cancellationToken = default)
+            {
+                var resolvedDestination = destination.Slice(0, Math.Min(_maxReadLength, destination.Length));
+                return base.ReadAsync(resolvedDestination, cancellationToken);
+            }
+        }
+
+        private byte[] CreateTestData(int size)
+        {
+            var data = new byte[size];
+            for (var i = 0; i < data.Length; i++)
+            {
+                data[i] = (byte)i; // Will loop around back to zero
+            }
+            return data;
+        }
+
         [Test]
         public void DecodeBase64DataFragments_MultipleFragments_Success()
         {
@@ -57,11 +119,11 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             // Arrange
             var data = Encoding.UTF8.GetBytes("AAAAAAYKBHRlc3Q=gAAAABANCmdycGMtc3RhdHVzOiAw");
 
-            var ms = new MemoryStream(data);
-            var gprcWebStream = new Base64ResponseStream(ms);
+            var ms = new LimitedReadMemoryStream(data, 3);
+            var base64Stream = new Base64ResponseStream(ms);
 
             // Act 1
-            var messageHeadData = await ReadContent(gprcWebStream, 5);
+            var messageHeadData = await ReadContent(base64Stream, 5);
 
             // Assert 1
             Assert.AreEqual(0, messageHeadData[0]);
@@ -71,14 +133,14 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             Assert.AreEqual(6, messageHeadData[4]);
 
             // Act 2
-            var messageData = await ReadContent(gprcWebStream, 6);
+            var messageData = await ReadContent(base64Stream, 6);
 
             // Assert 2
             var s = Encoding.UTF8.GetString(messageData.AsSpan(2));
             Assert.AreEqual("test", s);
 
             // Act 3
-            var footerHeadData = await ReadContent(gprcWebStream, 5);
+            var footerHeadData = await ReadContent(base64Stream, 5);
 
             // Assert 3
             Assert.AreEqual(128, footerHeadData[0]);
@@ -88,10 +150,70 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             Assert.AreEqual(16, footerHeadData[4]);
 
             // Act 3
-            StreamReader r = new StreamReader(gprcWebStream, Encoding.UTF8);
+            StreamReader r = new StreamReader(base64Stream, Encoding.UTF8);
             var footerText = await r.ReadToEndAsync();
 
             Assert.AreEqual("\r\ngrpc-status: 0", footerText);
+        }
+
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        [TestCase(5)]
+        [TestCase(6)]
+        [TestCase(7)]
+        [TestCase(8)]
+        [TestCase(9)]
+        [TestCase(10)]
+        public async Task ReadAsync_MultipleReadsWithLimitedData_Success(int readSize)
+        {
+            // Arrange
+            var base64Data = Encoding.UTF8.GetBytes("AAAAAAYKBHRlc3Q=gAAAABANCmdycGMtc3RhdHVzOiAw");
+
+            var ms = new LimitedReadMemoryStream(base64Data, readSize);
+            var base64Stream = new Base64ResponseStream(ms);
+
+            // Act 1
+            var messageHeadData = await ReadContent(base64Stream, 5);
+
+            // Assert 1
+            Assert.AreEqual(0, messageHeadData[0]);
+            Assert.AreEqual(0, messageHeadData[1]);
+            Assert.AreEqual(0, messageHeadData[2]);
+            Assert.AreEqual(0, messageHeadData[3]);
+            Assert.AreEqual(6, messageHeadData[4]);
+
+            // Act 2
+            var messageData = await ReadContent(base64Stream, 6);
+
+            // Assert 2
+            var s = Encoding.UTF8.GetString(messageData.AsSpan(2));
+            Assert.AreEqual("test", s);
+
+            // Act 3
+            var footerHeadData = await ReadContent(base64Stream, 5);
+
+            // Assert 3
+            Assert.AreEqual(128, footerHeadData[0]);
+            Assert.AreEqual(0, footerHeadData[1]);
+            Assert.AreEqual(0, footerHeadData[2]);
+            Assert.AreEqual(0, footerHeadData[3]);
+            Assert.AreEqual(16, footerHeadData[4]);
+
+            // Act 3
+            var footerContentData = await ReadContent(base64Stream, 16);
+
+            var expected = Convert.FromBase64String("AAAAAAYKBHRlc3Q=")
+               .Concat(Convert.FromBase64String("gAAAABANCmdycGMtc3RhdHVzOiAw"))
+               .ToArray();
+            var actual = messageHeadData
+                .Concat(messageData)
+                .Concat(footerHeadData)
+                .Concat(footerContentData)
+                .ToArray();
+
+            Assert.AreEqual(expected, actual);
         }
 
         private static async Task<byte[]> ReadContent(Stream responseStream, uint length, CancellationToken cancellationToken = default)
@@ -101,7 +223,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             if (length > 0)
             {
                 var received = 0;
-                var read = 0;
+                int read;
                 messageData = new byte[length];
                 while ((read = await responseStream.ReadAsync(messageData.AsMemory(received, messageData.Length - received), cancellationToken).ConfigureAwait(false)) > 0)
                 {
@@ -128,11 +250,11 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             var data = Encoding.UTF8.GetBytes("Hello world");
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(Convert.ToBase64String(data)));
-            var gprcWebStream = new Base64ResponseStream(ms);
+            var base64Stream = new Base64ResponseStream(ms);
 
             // Act
             var buffer = new byte[1024];
-            var read = await gprcWebStream.ReadAsync(buffer);
+            var read = await base64Stream.ReadAsync(buffer);
 
             // Assert
             Assert.AreEqual(read, data.Length);
@@ -146,14 +268,14 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             var data = Encoding.UTF8.GetBytes("Hello world");
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(Convert.ToBase64String(data)));
-            var gprcWebStream = new Base64ResponseStream(ms);
+            var base64Stream = new Base64ResponseStream(ms);
 
             // Act
             var allData = new List<byte>();
             var buffer = new byte[1];
 
             int read;
-            while ((read = await gprcWebStream.ReadAsync(buffer)) > 0)
+            while ((read = await base64Stream.ReadAsync(buffer)) > 0)
             {
                 allData.AddRange(buffer.AsSpan(0, read).ToArray());
             }
@@ -170,14 +292,14 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             var data = Encoding.UTF8.GetBytes("Hello world");
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(Convert.ToBase64String(data)));
-            var gprcWebStream = new Base64ResponseStream(ms);
+            var base64Stream = new Base64ResponseStream(ms);
 
             // Act
             var allData = new List<byte>();
             var buffer = new byte[2];
 
             int read;
-            while ((read = await gprcWebStream.ReadAsync(buffer)) > 0)
+            while ((read = await base64Stream.ReadAsync(buffer)) > 0)
             {
                 allData.AddRange(buffer.AsSpan(0, read).ToArray());
             }
@@ -202,14 +324,14 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             var data = Encoding.UTF8.GetBytes(message);
 
             var ms = new MemoryStream(Encoding.UTF8.GetBytes(Convert.ToBase64String(data)));
-            var gprcWebStream = new Base64ResponseStream(ms);
+            var base64Stream = new Base64ResponseStream(ms);
 
             // Act
             var allData = new List<byte>();
             var buffer = new byte[readSize];
 
             int read;
-            while ((read = await gprcWebStream.ReadAsync(buffer)) > 0)
+            while ((read = await base64Stream.ReadAsync(buffer)) > 0)
             {
                 allData.AddRange(buffer.AsSpan(0, read).ToArray());
             }

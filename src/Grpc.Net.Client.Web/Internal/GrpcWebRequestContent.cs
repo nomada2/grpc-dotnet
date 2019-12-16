@@ -19,6 +19,7 @@
 using System.IO;
 using System.Net;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 
 namespace Grpc.Net.Client.Web.Internal
@@ -32,7 +33,6 @@ namespace Grpc.Net.Client.Web.Internal
         {
             _inner = inner;
             _mode = mode;
-
             foreach (var header in inner.Headers)
             {
                 Headers.Add(header.Key, header.Value);
@@ -43,14 +43,24 @@ namespace Grpc.Net.Client.Web.Internal
                 : GrpcWebProtocolConstants.GrpcWebHeader;
         }
 
-        protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
         {
-            if (_mode == GrpcWebMode.GrpcWebText)
-            {
-                stream = new Base64RequestStream(stream);
-            }
+            Base64RequestStream? base64RequestStream = null;
 
-            return _inner.CopyToAsync(stream);
+            try
+            {
+                if (_mode == GrpcWebMode.GrpcWebText)
+                {
+                    base64RequestStream = new Base64RequestStream(stream);
+                    stream = base64RequestStream;
+                }
+
+                await _inner.CopyToAsync(stream).ConfigureAwait(false);
+            }
+            finally
+            {
+                base64RequestStream?.Dispose();
+            }
         }
 
         protected override bool TryComputeLength(out long length)

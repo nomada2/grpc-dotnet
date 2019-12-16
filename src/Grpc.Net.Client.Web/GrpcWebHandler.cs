@@ -18,6 +18,7 @@
 
 using System;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Net.Client.Web.Internal;
@@ -67,7 +68,17 @@ namespace Grpc.Net.Client.Web
         /// <param name="request">The HTTP request message to send to the server.</param>
         /// <param name="cancellationToken">A cancellation token to cancel operation.</param>
         /// <returns>The task object representing the asynchronous operation.</returns>
-        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            if (IsGrpcContentType(request.Content?.Headers.ContentType))
+            {
+                return SendAsyncCore(request, cancellationToken);
+            }
+
+            return base.SendAsync(request, cancellationToken);
+        }
+
+        private async Task<HttpResponseMessage> SendAsyncCore(HttpRequestMessage request, CancellationToken cancellationToken)
         {
             request.Content = new GrpcWebRequestContent(request.Content, _mode);
             request.Version = _httpVersion;
@@ -78,6 +89,35 @@ namespace Grpc.Net.Client.Web
             response.Version = GrpcWebProtocolConstants.Http20;
 
             return response;
+        }
+
+        private static bool IsGrpcContentType(MediaTypeHeaderValue? contentType)
+        {
+            if (contentType == null)
+            {
+                return false;
+            }
+
+            if (!contentType.MediaType.StartsWith(GrpcWebProtocolConstants.GrpcHeaderValue, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            if (contentType.MediaType.Length == GrpcWebProtocolConstants.GrpcHeaderValue.Length)
+            {
+                // Exact match
+                return true;
+            }
+
+            // Support variations on the content-type (e.g. +proto, +json)
+            var nextChar = contentType.MediaType[GrpcWebProtocolConstants.GrpcHeaderValue.Length];
+            if (nextChar == '+')
+            {
+                // Accept any message format. Marshaller could be set to support third-party formats
+                return true;
+            }
+
+            return false;
         }
     }
 }

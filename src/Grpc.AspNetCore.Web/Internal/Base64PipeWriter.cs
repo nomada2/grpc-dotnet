@@ -31,7 +31,14 @@ namespace Grpc.AspNetCore.Web.Internal
     internal class Base64PipeWriter : PipeWriter
     {
         private readonly PipeWriter _inner;
+        // We have to write original data to buffer. GetSpan/GetMemory sometimes won't return the
+        // original data if we call it again on Advance so we can't use it as temporary buffer.
+        private byte[]? _buffer;
         private int _remainder;
+
+        // Internal for unit testing
+        internal byte _remainderByte0;
+        internal byte _remainderByte1;
 
         public Base64PipeWriter(PipeWriter inner)
         {
@@ -51,38 +58,22 @@ namespace Grpc.AspNetCore.Web.Internal
 
             if (bytesToProcess > 0)
             {
+                PreserveRemainder(_buffer.AsSpan(bytesToProcess, newRemainder));
+
                 // When writing base64 content we don't want any padding until the end.
                 // Process data in intervals of 3, and save the remainder at the start of a new span
                 var buffer = _inner.GetSpan((bytesToProcess / 3) * 4);
-
-                PreserveRemainder(newRemainder, buffer.Slice(bytesToProcess), out var b1, out var b2);
-
-                CoreAdvance(bytesToProcess, buffer);
-
-                SetRemainder(newRemainder, b1, b2);
+                CoreAdvance(_buffer.AsSpan(0, bytesToProcess), buffer);
             }
             else
             {
-                _remainder = _remainder += bytes;
+                PreserveRemainder(_buffer.AsSpan(0, resolvedBytes));
             }
         }
 
-        private void SetRemainder(int newRemainder, byte b1, byte b2)
+        private void CoreAdvance(ReadOnlySpan<byte> source, Span<byte> destination)
         {
-            if (newRemainder >= 1)
-            {
-                var buffer = _inner.GetSpan(newRemainder);
-                buffer[0] = b1;
-                if (newRemainder >= 2)
-                {
-                    buffer[1] = b2;
-                }
-            }
-        }
-
-        private void CoreAdvance(int bytesToProcess, Span<byte> buffer)
-        {
-            var status = Base64.EncodeToUtf8InPlace(buffer, bytesToProcess, out var bytesWritten);
+            var status = Base64.EncodeToUtf8(source, destination, out _, out var bytesWritten);
             if (status != OperationStatus.Done)
             {
                 throw new InvalidOperationException($"Expected status of Done when converting to base64. Got {status}.");
@@ -91,28 +82,25 @@ namespace Grpc.AspNetCore.Web.Internal
             _inner.Advance(bytesWritten);
         }
 
-        private void PreserveRemainder(int newRemainder, Span<byte> buffer, out byte b1, out byte b2)
+        private void PreserveRemainder(Span<byte> buffer)
         {
-            if (newRemainder >= 1)
+            if (buffer.Length >= 1)
             {
-                b1 = buffer[0];
+                _remainderByte0 = buffer[0];
 
-                if (newRemainder >= 2)
+                if (buffer.Length >= 2)
                 {
-                    b2 = buffer[1];
+                    _remainderByte1 = buffer[1];
                     _remainder = 2;
                 }
                 else
                 {
                     _remainder = 1;
-                    b2 = 0;
                 }
             }
             else
             {
                 _remainder = 0;
-                b1 = 0;
-                b2 = 0;
             }
         }
 
@@ -128,6 +116,12 @@ namespace Grpc.AspNetCore.Web.Internal
                 WriteRemainder();
             }
 
+            if (_buffer != null)
+            {
+                ArrayPool<byte>.Shared.Return(_buffer);
+                _buffer = null;
+            }
+
             _inner.Complete(exception);
         }
 
@@ -141,13 +135,37 @@ namespace Grpc.AspNetCore.Web.Internal
         public override Memory<byte> GetMemory(int sizeHint = 0)
         {
             // Get size plus the current remainder (it is included at the start of the data returned)
-            return _inner.GetMemory(sizeHint + _remainder).Slice(_remainder);
+            if (_buffer == null || _buffer.Length < sizeHint + _remainder)
+            {
+                if (_buffer != null)
+                {
+                    ArrayPool<byte>.Shared.Return(_buffer);
+                }
+
+                _buffer = ArrayPool<byte>.Shared.Rent(sizeHint + _remainder);
+            }
+
+            if (_remainder > 0)
+            {
+                SetRemainder(_buffer.AsSpan());
+                return _buffer.AsMemory(_remainder);
+            }
+
+            return _buffer;
         }
 
         public override Span<byte> GetSpan(int sizeHint = 0)
         {
-            // Get size plus the current remainder (it is included at the start of the data returned)
-            return _inner.GetSpan(sizeHint + _remainder).Slice(_remainder);
+            return GetMemory(sizeHint).Span;
+        }
+
+        private void SetRemainder(Span<byte> span)
+        {
+            span[0] = _remainderByte0;
+            if (_remainder >= 2)
+            {
+                span[1] = _remainderByte1;
+            }
         }
 
         private void WriteRemainder()
@@ -156,7 +174,10 @@ namespace Grpc.AspNetCore.Web.Internal
             if (_remainder > 0)
             {
                 var buffer = _inner.GetSpan(4);
-                CoreAdvance(_remainder, buffer);
+
+                Span<byte> remainder = stackalloc byte[2];
+                SetRemainder(remainder);
+                CoreAdvance(remainder.Slice(0, _remainder), buffer);
 
                 _remainder = 0;
             }

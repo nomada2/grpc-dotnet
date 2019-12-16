@@ -56,6 +56,7 @@ namespace Grpc.Net.Client.Web.Internal
                     }
                     else
                     {
+                        // Should never get here. Client always passes 5 to read the header.
                         throw new InvalidOperationException("Buffer is not large enough for header");
                     }
 
@@ -77,7 +78,7 @@ namespace Grpc.Net.Client.Web.Internal
                     _state = _contentRemaining > 0 ? ResponseState.Content : ResponseState.Ready;
                     return 5;
                 case ResponseState.Content:
-                    if (_contentRemaining > data.Length)
+                    if (data.Length >= _contentRemaining)
                     {
                         data = data.Slice(0, _contentRemaining);
                     }
@@ -112,6 +113,7 @@ namespace Grpc.Net.Client.Web.Internal
                 }
             }
 
+            _state = ResponseState.Complete;
             return 0;
         }
 
@@ -153,7 +155,8 @@ namespace Grpc.Net.Client.Web.Internal
         private enum ResponseState
         {
             Ready,
-            Content
+            Content,
+            Complete
         }
 
         #region Stream implementation

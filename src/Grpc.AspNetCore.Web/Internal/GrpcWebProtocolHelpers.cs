@@ -34,16 +34,6 @@ namespace Grpc.AspNetCore.Web.Internal
         
         private static readonly byte Trailers = 0x80;
 
-        private static void WriteTrailerHeader(PipeWriter output, byte type, uint length)
-        {
-            var buffer = output.GetSpan(5);
-
-            buffer[0] = type;
-            BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(1), length);
-
-            output.Advance(5);
-        }
-
         public static async Task WriteTrailers(IHeaderDictionary trailers, PipeWriter output)
         {
             // Flush so the last message is written as its own base64 segment
@@ -54,6 +44,16 @@ namespace Grpc.AspNetCore.Web.Internal
             WriteTrailersContent(trailers, output);
 
             await output.FlushAsync();
+        }
+
+        private static void WriteTrailerHeader(PipeWriter output, byte type, uint length)
+        {
+            var buffer = output.GetSpan(5);
+
+            buffer[0] = type;
+            BinaryPrimitives.WriteUInt32BigEndian(buffer.Slice(1), length);
+
+            output.Advance(5);
         }
 
         private static int CalculateHeaderSize(IHeaderDictionary trailers)

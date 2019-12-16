@@ -17,7 +17,6 @@
 #endregion
 
 using System;
-using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using Google.Protobuf.WellKnownTypes;
@@ -35,7 +34,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
     [TestFixture(GrpcWebMode.GrpcWeb, TestServerEndpointName.Http2)]
     [TestFixture(GrpcWebMode.GrpcWebText, TestServerEndpointName.Http1)]
     [TestFixture(GrpcWebMode.GrpcWebText, TestServerEndpointName.Http2)]
-    public class ServerStreamingMethodTests : GrpcWebFunctionTestBase
+    public class ServerStreamingMethodTests : GrpcWebFunctionalTestBase
     {
         public ServerStreamingMethodTests(GrpcWebMode grpcWebMode, TestServerEndpointName endpointName)
             : base(grpcWebMode, endpointName)

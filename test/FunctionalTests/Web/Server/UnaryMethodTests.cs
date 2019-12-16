@@ -22,18 +22,21 @@ using System.Linq;
 using System.Threading.Tasks;
 using Grpc.AspNetCore.FunctionalTests.Infrastructure;
 using Grpc.Gateway.Testing;
+using Grpc.Net.Client.Web;
 using Grpc.Tests.Shared;
 using NUnit.Framework;
 
 namespace Grpc.AspNetCore.FunctionalTests.Web.Server
 {
-    public abstract class UnaryMethodTestsBase : FunctionalTestBase
+    [TestFixture(GrpcWebMode.GrpcWeb, TestServerEndpointName.Http1)]
+    [TestFixture(GrpcWebMode.GrpcWeb, TestServerEndpointName.Http2)]
+    [TestFixture(GrpcWebMode.GrpcWebText, TestServerEndpointName.Http1)]
+    [TestFixture(GrpcWebMode.GrpcWebText, TestServerEndpointName.Http2)]
+    public class UnaryMethodTests : GrpcWebFunctionalTestBase
     {
-        protected abstract string ContentType { get; }
-
-        protected abstract PipeWriter ResolvePipeWriter(PipeWriter pipeWriter);
-
-        protected abstract PipeReader ResolvePipeReader(PipeReader pipeReader);
+        public UnaryMethodTests(GrpcWebMode grpcWebMode, TestServerEndpointName endpointName) : base(grpcWebMode, endpointName)
+        {
+        }
 
         [Test]
         public async Task SendValidRequest_SuccessResponse()
@@ -45,58 +48,24 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Server
             };
 
             var ms = new MemoryStream();
-            MessageHelpers.WriteMessage(ms, requestMessage, pipeWriterWrapper: ResolvePipeWriter);
+            MessageHelpers.WriteMessage(ms, requestMessage);
 
             // Act
-            var response = await Fixture.Client.PostAsync(
+            var grpcWebClient = CreateGrpcWebClient();
+            var response = await grpcWebClient.PostAsync(
                 "grpc.gateway.testing.EchoService/Echo",
-                new GrpcStreamContent(ms, ContentType)).DefaultTimeout();
+                new GrpcStreamContent(ms)).DefaultTimeout();
 
             // Assert
-            response.AssertIsSuccessfulGrpcRequest(ContentType);
+            response.AssertIsSuccessfulGrpcRequest();
 
             var s = await response.Content.ReadAsStreamAsync();
-            var reader = ResolvePipeReader(PipeReader.Create(s));
+            var reader = PipeReader.Create(s);
 
             var message = await MessageHelpers.AssertReadStreamMessageAsync<EchoResponse>(reader);
             Assert.AreEqual("test", message!.Message);
 
-            var readResult = await reader.ReadAsync();
-
-            await GrpcWebTestHelpers.AssertSuccessTrailerAsync(reader);
-        }
-
-        [TestCase(TestServerEndpointName.Http1)]
-        [TestCase(TestServerEndpointName.Http1WithTls)]
-        [TestCase(TestServerEndpointName.Http2)]
-        public async Task SendValidRequest_DifferentProtocols_SuccessResponse(TestServerEndpointName endpointName)
-        {
-            // Arrange
-            var requestMessage = new EchoRequest
-            {
-                Message = "test"
-            };
-
-            var ms = new MemoryStream();
-            MessageHelpers.WriteMessage(ms, requestMessage, pipeWriterWrapper: ResolvePipeWriter);
-
-            var client = Fixture.CreateClient(endpointName);
-
-            // Act
-            var response = await client.PostAsync(
-                "grpc.gateway.testing.EchoService/Echo",
-                new GrpcStreamContent(ms, ContentType)).DefaultTimeout();
-
-            // Assert
-            response.AssertIsSuccessfulGrpcRequest(ContentType);
-
-            var s = await response.Content.ReadAsStreamAsync();
-            var reader = ResolvePipeReader(PipeReader.Create(s));
-
-            var message = await MessageHelpers.AssertReadStreamMessageAsync<EchoResponse>(reader);
-            Assert.AreEqual("test", message!.Message);
-
-            await GrpcWebTestHelpers.AssertSuccessTrailerAsync(reader);
+            response.AssertTrailerStatus();
         }
 
         [Test]
@@ -121,18 +90,18 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Server
             };
 
             var ms = new MemoryStream();
-            MessageHelpers.WriteMessage(ms, requestMessage, pipeWriterWrapper: ResolvePipeWriter);
+            MessageHelpers.WriteMessage(ms, requestMessage);
 
             // Act
             var response = await Fixture.Client.PostAsync(
                 "grpc.gateway.testing.EchoService/EchoAbort",
-                new GrpcStreamContent(ms, ContentType)).DefaultTimeout();
+                new GrpcStreamContent(ms)).DefaultTimeout();
 
             // Assert
-            response.AssertIsSuccessfulGrpcRequest(ContentType);
+            response.AssertIsSuccessfulGrpcRequest();
 
             var s = await response.Content.ReadAsStreamAsync();
-            var reader = ResolvePipeReader(PipeReader.Create(s));
+            var reader = PipeReader.Create(s);
 
             var readResult = await reader.ReadAsync();
             Assert.AreEqual(0, readResult.Buffer.Length);

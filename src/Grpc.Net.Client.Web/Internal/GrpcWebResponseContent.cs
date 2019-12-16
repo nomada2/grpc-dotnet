@@ -44,9 +44,22 @@ namespace Grpc.Net.Client.Web.Internal
             Headers.ContentType = GrpcWebProtocolConstants.GrpcHeader;
         }
 
-        protected override Task SerializeToStreamAsync(Stream stream, TransportContext context)
+        protected override async Task SerializeToStreamAsync(Stream stream, TransportContext context)
         {
-            throw new NotImplementedException();
+            // This method will only be called by tests when response content is
+            // accessed via ReadAsBytesAsync. The gRPC client will always
+            // call ReadAsStreamAsync, which will call CreateContentReadStreamAsync.
+
+            var innerStream = await _inner.ReadAsStreamAsync().ConfigureAwait(false);
+
+            if (_mode == GrpcWebMode.GrpcWebText)
+            {
+                innerStream = new Base64ResponseStream(innerStream);
+            }
+
+            innerStream = new GrpcWebResponseStream(innerStream, _httpResponseMessage);
+
+            await innerStream.CopyToAsync(stream).ConfigureAwait(false);
         }
 
         protected override async Task<Stream> CreateContentReadStreamAsync()
@@ -58,6 +71,8 @@ namespace Grpc.Net.Client.Web.Internal
             //ms.Seek(0, SeekOrigin.Begin);
 
             //var data = ms.ToArray();
+
+            //stream = ms;
 
             if (_mode == GrpcWebMode.GrpcWebText)
             {
@@ -71,6 +86,17 @@ namespace Grpc.Net.Client.Web.Internal
         {
             length = -1;
             return false;
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            if (disposing)
+            {
+                // This is important. Disposing original response content will cancel the gRPC call.
+                _inner.Dispose();
+            }
+
+            base.Dispose(disposing);
         }
     }
 }

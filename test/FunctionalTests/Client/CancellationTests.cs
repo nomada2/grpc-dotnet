@@ -212,7 +212,7 @@ namespace Grpc.AspNetCore.FunctionalTests.Client
                 while (!context.CancellationToken.IsCancellationRequested)
                 {
                     await streamWriter.WriteAsync(new DataMessage());
-                    await Task.Delay(TimeSpan.FromMilliseconds(10));
+                    await Task.Delay(TimeSpan.FromMilliseconds(1000));
                 }
 
                 serverCompleteTcs.TrySetResult(null);

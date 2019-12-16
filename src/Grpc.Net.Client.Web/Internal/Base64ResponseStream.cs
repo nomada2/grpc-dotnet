@@ -71,7 +71,7 @@ namespace Grpc.Net.Client.Web.Internal
 
             var totalRead = 0;
             // Minimum valid base64 length is 4. Read until we have at least that much content
-            while (totalRead < 4)
+            do
             {
                 var read = await _inner.ReadAsync(availableReadData, cancellationToken);
                 if (read == 0)
@@ -90,10 +90,12 @@ namespace Grpc.Net.Client.Web.Internal
 
                 availableReadData = availableReadData.Slice(read);
                 totalRead += read;
-            }
+
+                // The underlying stream may not have a complete 4 byte segment yet
+                // so read again until we have the right data length.
+            } while (totalRead % 4 != 0);
 
             var base64Data = underlyingReadData.Slice(0, totalRead);
-
             int bytesWritten = DecodeBase64DataFragments(base64Data.Span);
 
             return ReturnData(data, copyFromMinimumBuffer, bytesWritten);
@@ -105,7 +107,7 @@ namespace Grpc.Net.Client.Web.Internal
             var remainingBase64Data = base64Data;
 
             int paddingIndex;
-            while ((paddingIndex = PaddingIndex(remainingBase64Data)) != -1)
+            while (remainingBase64Data.Length > 4 && (paddingIndex = PaddingIndex(remainingBase64Data)) != -1)
             {
                 var base64Fragment = remainingBase64Data.Slice(0, paddingIndex + 1);
                 int bytesWritten = DecodeAndShift(base64Data, dataLength, base64Fragment);

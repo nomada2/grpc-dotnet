@@ -21,14 +21,14 @@ using System.Net.Http;
 using Grpc.AspNetCore.FunctionalTests.Infrastructure;
 using Grpc.Net.Client.Web;
 
-namespace Grpc.AspNetCore.FunctionalTests.Web.Client
+namespace Grpc.AspNetCore.FunctionalTests.Web
 {
-    public abstract class GrpcWebFunctionTestBase : FunctionalTestBase
+    public abstract class GrpcWebFunctionalTestBase : FunctionalTestBase
     {
         private readonly GrpcWebMode _grpcWebMode;
         private readonly TestServerEndpointName _endpointName;
 
-        protected GrpcWebFunctionTestBase(GrpcWebMode grpcWebMode, TestServerEndpointName endpointName)
+        protected GrpcWebFunctionalTestBase(GrpcWebMode grpcWebMode, TestServerEndpointName endpointName)
         {
             _grpcWebMode = grpcWebMode;
             _endpointName = endpointName;

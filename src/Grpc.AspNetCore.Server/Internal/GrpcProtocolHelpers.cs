@@ -73,26 +73,26 @@ namespace Grpc.AspNetCore.Server.Internal
             return false;
         }
 
-        public static bool IsGrpcContentType(string contentType)
+        public static bool IsGrpcContentType(string contentType, string s)
         {
-            if (contentType == null)
+            if (s == null)
             {
                 return false;
             }
 
-            if (!contentType.StartsWith(GrpcProtocolConstants.GrpcContentType, StringComparison.OrdinalIgnoreCase))
+            if (!s.StartsWith(contentType, StringComparison.OrdinalIgnoreCase))
             {
                 return false;
             }
 
-            if (contentType.Length == GrpcProtocolConstants.GrpcContentType.Length)
+            if (s.Length == contentType.Length)
             {
                 // Exact match
                 return true;
             }
 
             // Support variations on the content-type (e.g. +proto, +json)
-            char nextChar = contentType[GrpcProtocolConstants.GrpcContentType.Length];
+            char nextChar = s[contentType.Length];
             if (nextChar == ';')
             {
                 return true;
@@ -113,7 +113,7 @@ namespace Grpc.AspNetCore.Server.Internal
                 error = "Content-Type is missing from the request.";
                 return true;
             }
-            else if (!IsGrpcContentType(httpContext.Request.ContentType))
+            else if (!IsGrpcContentType(GrpcProtocolConstants.GrpcContentType, httpContext.Request.ContentType))
             {
                 error = $"Content-Type '{httpContext.Request.ContentType}' is not supported.";
                 return true;

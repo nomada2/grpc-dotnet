@@ -23,6 +23,8 @@ namespace Grpc.Net.Client.Web.Internal
 {
     internal static class GrpcWebProtocolConstants
     {
+        public const string GrpcHeaderValue = "application/grpc";
+
         public static MediaTypeHeaderValue GrpcWebTextHeader = new MediaTypeHeaderValue("application/grpc-web-text");
         public static MediaTypeHeaderValue GrpcWebHeader = new MediaTypeHeaderValue("application/grpc-web");
         public static MediaTypeHeaderValue GrpcHeader = new MediaTypeHeaderValue("application/grpc");

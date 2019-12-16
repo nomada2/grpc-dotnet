@@ -88,5 +88,39 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Client
             Assert.AreEqual(0, read2);
             Assert.AreEqual(0, httpResponseMessage.TrailingHeaders.Count());
         }
+
+        [Test]
+        public async Task ReadAsync_ReadContentWithLargeBuffer_ParseMessageAndTrailers()
+        {
+            // Arrange
+            var data = new byte[] { 0, 0, 0, 0, 1, 99, 128, 0, 0, 0, 0 };
+            var httpResponseMessage = new HttpResponseMessage();
+            var ms = new MemoryStream(data);
+            var responseStream = new GrpcWebResponseStream(ms, httpResponseMessage);
+
+            // Act 1
+            var contentHeaderData = new byte[1024];
+            var read1 = await responseStream.ReadAsync(contentHeaderData);
+
+            // Assert 1
+            Assert.AreEqual(5, read1);
+            Assert.AreEqual(0, contentHeaderData[0]);
+            Assert.AreEqual(0, contentHeaderData[1]);
+            Assert.AreEqual(0, contentHeaderData[2]);
+            Assert.AreEqual(0, contentHeaderData[3]);
+            Assert.AreEqual(1, contentHeaderData[4]);
+
+            // Act 2
+            var read2 = await responseStream.ReadAsync(contentHeaderData);
+
+            // Assert 2
+            Assert.AreEqual(1, read2);
+
+            // Act 2
+            var read3 = await responseStream.ReadAsync(contentHeaderData);
+
+            // Assert 2
+            Assert.AreEqual(0, read3);
+        }
     }
 }

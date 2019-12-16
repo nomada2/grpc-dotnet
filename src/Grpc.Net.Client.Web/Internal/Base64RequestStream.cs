@@ -28,44 +28,12 @@ namespace Grpc.Net.Client.Web.Internal
     internal class Base64RequestStream : Stream
     {
         private readonly Stream _inner;
-
         private byte[]? _buffer;
         private int _remainder;
 
         public Base64RequestStream(Stream inner)
         {
             _inner = inner;
-        }
-
-        public override bool CanRead { get; }
-        public override bool CanSeek { get; }
-        public override bool CanWrite { get; }
-        public override long Length { get; }
-        public override long Position { get; set; }
-
-        public override void Flush()
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public override int Read(byte[] buffer, int offset, int count)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public override long Seek(long offset, SeekOrigin origin)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public override void SetLength(long value)
-        {
-            throw new System.NotImplementedException();
-        }
-
-        public override void Write(byte[] buffer, int offset, int count)
-        {
-            throw new System.NotImplementedException();
         }
 
         public override async ValueTask WriteAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
@@ -156,5 +124,44 @@ namespace Grpc.Net.Client.Web.Internal
             }
             base.Dispose(disposing);
         }
+
+        #region Stream implementation
+        public override bool CanRead => _inner.CanRead;
+        public override bool CanSeek => _inner.CanSeek;
+        public override bool CanWrite => _inner.CanWrite;
+        public override long Length => _inner.Length;
+        public override long Position
+        {
+            get => _inner.Position;
+            set { _inner.Position = value; }
+        }
+
+        public override void Flush()
+        {
+            throw new NotImplementedException();
+        }
+
+        public override int Read(byte[] buffer, int offset, int count)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override long Seek(long offset, SeekOrigin origin)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void SetLength(long value)
+        {
+            throw new NotImplementedException();
+        }
+
+        public override void Write(byte[] buffer, int offset, int count)
+        {
+            // Used by unit tests
+            WriteAsync(buffer.AsMemory(0, count)).GetAwaiter().GetResult();
+            FlushAsync().GetAwaiter().GetResult();
+        }
+        #endregion
     }
 }

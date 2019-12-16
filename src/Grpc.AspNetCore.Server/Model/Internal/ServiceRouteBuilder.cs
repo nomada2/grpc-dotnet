@@ -108,7 +108,7 @@ namespace Grpc.AspNetCore.Server.Model.Internal
             if (serviceMethodsRegistry.Methods.Count == 0)
             {
                 // Only one unimplemented service endpoint is needed for the application
-                CreateUnimplementedEndpoint(endpointRouteBuilder, "{unimplementedService}/{unimplementedMethod}", "gRPC - Unimplemented service", serverCallHandlerFactory.CreateUnimplementedService());
+                CreateUnimplementedEndpoint(endpointRouteBuilder, "{unimplementedService}/{unimplementedMethod}", "Unimplemented service", serverCallHandlerFactory.CreateUnimplementedService());
             }
 
             // Return UNIMPLEMENTED status for missing method:
@@ -125,7 +125,7 @@ namespace Grpc.AspNetCore.Server.Model.Internal
                     continue;
                 }
 
-                CreateUnimplementedEndpoint(endpointRouteBuilder, serviceName + "/{unimplementedMethod}", $"gRPC - Unimplemented method for {serviceName}", serverCallHandlerFactory.CreateUnimplementedMethod());
+                CreateUnimplementedEndpoint(endpointRouteBuilder, serviceName + "/{unimplementedMethod}", $"Unimplemented method for {serviceName}", serverCallHandlerFactory.CreateUnimplementedMethod());
             }
         }
 
@@ -152,7 +152,9 @@ namespace Grpc.AspNetCore.Server.Model.Internal
                     return false;
                 }
 
-                return GrpcProtocolHelpers.IsGrpcContentType(httpContext.Request.ContentType);
+                return GrpcProtocolHelpers.IsGrpcContentType(GrpcProtocolConstants.GrpcContentType, httpContext.Request.ContentType) ||
+                    GrpcProtocolHelpers.IsGrpcContentType("application/grpc-web", httpContext.Request.ContentType) ||
+                    GrpcProtocolHelpers.IsGrpcContentType("application/grpc-web-text", httpContext.Request.ContentType);
             }
 
             private GrpcContentTypeConstraint()

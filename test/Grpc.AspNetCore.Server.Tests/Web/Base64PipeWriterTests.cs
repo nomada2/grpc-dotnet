@@ -18,6 +18,7 @@
 
 using System;
 using System.Buffers;
+using System.Collections.Generic;
 using System.IO.Pipelines;
 using System.Linq;
 using System.Text;
@@ -47,8 +48,8 @@ namespace Grpc.AspNetCore.Server.Tests.Web
             w.Advance(initialData.Length);
 
             // Assert
-            Assert.AreEqual((byte)'l', innerBuffer.Span[12]); // remaining bytes, end of "world"
-            Assert.AreEqual((byte)'d', innerBuffer.Span[13]); // remaining bytes, end of "world"
+            Assert.AreEqual((byte)'l', w._remainderByte0); // remaining bytes, end of "world"
+            Assert.AreEqual((byte)'d', w._remainderByte1); // remaining bytes, end of "world"
 
             var base64Data = Encoding.UTF8.GetBytes(Convert.ToBase64String(initialData)).AsSpan(0, 12).ToArray();
             CollectionAssert.AreEqual(innerBuffer.Slice(0, 12).ToArray(), base64Data);
@@ -78,8 +79,11 @@ namespace Grpc.AspNetCore.Server.Tests.Web
             CollectionAssert.AreEqual(base64Data, result.Buffer.ToArray());
         }
 
-        [Test]
-        public async Task Advance_SmallDataMultipleWrites_Success()
+        [TestCase(1)]
+        [TestCase(2)]
+        [TestCase(3)]
+        [TestCase(4)]
+        public async Task Advance_SmallDataMultipleWrites_Success(int size)
         {
             // Arrange
             var initialData = Encoding.UTF8.GetBytes("Hello world");
@@ -88,11 +92,14 @@ namespace Grpc.AspNetCore.Server.Tests.Web
             var w = new Base64PipeWriter(testPipe.Writer);
 
             // Act
-            foreach (var b in initialData)
+            foreach (var b in Split(initialData, size))
             {
-                var buffer = w.GetMemory(1);
-                buffer.Span[0] = b;
-                w.Advance(1);
+                var buffer = w.GetMemory(b.Length);
+                for (var i = 0; i < b.Length; i++)
+                {
+                    buffer.Span[i] = b[i];
+                }
+                w.Advance(b.Length);
             }
 
             w.Complete();
@@ -102,7 +109,16 @@ namespace Grpc.AspNetCore.Server.Tests.Web
             Assert.Greater(result.Buffer.Length, 0);
 
             var base64Data = Encoding.UTF8.GetBytes(Convert.ToBase64String(initialData));
-            CollectionAssert.AreEqual(base64Data, result.Buffer.ToArray());
+            var resultData = result.Buffer.ToArray();
+            CollectionAssert.AreEqual(base64Data, resultData);
+        }
+
+        private static IEnumerable<T[]> Split<T>(T[] array, int size)
+        {
+            for (var i = 0; i < (float)array.Length / size; i++)
+            {
+                yield return array.Skip(i * size).Take(size).ToArray();
+            }
         }
 
         [Test]

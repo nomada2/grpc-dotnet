@@ -19,6 +19,7 @@
 using System;
 using System.Net.Http;
 using Grpc.Net.Client;
+using Grpc.Net.Client.Web;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -68,10 +69,14 @@ namespace Grpc.AspNetCore.FunctionalTests.Infrastructure
             if (messageHandler != null)
             {
                 messageHandler.InnerHandler = httpClientHandler;
+                //var webHandler = new GrpcWebHandler(GrpcWebMode.GrpcWebText);
+                //webHandler.InnerHandler = messageHandler;
                 client = new HttpClient(messageHandler);
             }
             else
             {
+                //var webHandler = new GrpcWebHandler(GrpcWebMode.GrpcWebText);
+                //webHandler.InnerHandler = httpClientHandler;
                 client = new HttpClient(httpClientHandler);
             }
 

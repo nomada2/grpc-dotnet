@@ -59,15 +59,7 @@ namespace Grpc.AspNetCore.Web.Internal
 
         private async Task HandleGrpcWebRequest(HttpContext httpContext, GrpcWebMode mode)
         {
-            var trailersFeature = new GrpcWebResponseTrailersFeature();
-            httpContext.Features.Set<IHttpResponseTrailersFeature>(trailersFeature);
-
-            if (mode == GrpcWebMode.GrpcWebText)
-            {
-                var grpcWebTextFeature = new GrpcWebTextFeature(httpContext);
-                httpContext.Features.Set<IRequestBodyPipeFeature>(grpcWebTextFeature);
-                httpContext.Features.Set<IHttpResponseBodyFeature>(grpcWebTextFeature);
-            }
+            var feature = SetGrpcWebFeature(mode, httpContext);
 
             // Modifying the request is required to stop Grpc.AspNetCore.Server from rejecting it
             httpContext.Request.Protocol = GrpcWebProtocolConstants.Http2Protocol;
@@ -76,23 +68,34 @@ namespace Grpc.AspNetCore.Web.Internal
             // Update response content type back to gRPC-Web
             httpContext.Response.OnStarting(() =>
             {
-                var contentType = mode == GrpcWebMode.GrpcWeb
-                    ? GrpcWebProtocolConstants.GrpcWebContentType
-                    : GrpcWebProtocolConstants.GrpcWebTextContentType;
-                var responseContentType = ResolveContentType(contentType, httpContext.Response.ContentType);
+                if (IsContentType(GrpcWebProtocolConstants.GrpcContentType, httpContext.Response.ContentType))
+                {
+                    var contentType = mode == GrpcWebMode.GrpcWeb
+                        ? GrpcWebProtocolConstants.GrpcWebContentType
+                        : GrpcWebProtocolConstants.GrpcWebTextContentType;
+                    var responseContentType = ResolveContentType(contentType, httpContext.Response.ContentType);
 
-                httpContext.Response.ContentType = responseContentType;
-                Log.SendingGrpcWebResponse(_logger, responseContentType);
-                
+                    httpContext.Response.ContentType = responseContentType;
+                    Log.SendingGrpcWebResponse(_logger, responseContentType);
+                }
+
                 return Task.CompletedTask;
             });
 
             await _next(httpContext);
 
-            if (trailersFeature.Trailers.Count > 0)
-            {
-                await GrpcWebProtocolHelpers.WriteTrailers(trailersFeature.Trailers, httpContext.Response.BodyWriter);
-            }
+            await feature.WriteTrailers();
+        }
+
+        private GrpcWebFeature SetGrpcWebFeature(GrpcWebMode mode, HttpContext httpContext)
+        {
+            var grpcWebTextFeature = new GrpcWebFeature(mode, httpContext);
+
+            httpContext.Features.Set<IRequestBodyPipeFeature>(grpcWebTextFeature);
+            httpContext.Features.Set<IHttpResponseBodyFeature>(grpcWebTextFeature);
+            httpContext.Features.Set<IHttpResponseTrailersFeature>(grpcWebTextFeature);
+
+            return grpcWebTextFeature;
         }
 
         private static string ResolveContentType(string newContentType, string originalContentType)
