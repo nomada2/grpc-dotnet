@@ -68,7 +68,7 @@ namespace Grpc.Net.Client.Web.Internal
 
                     _contentRemaining = (int)headerDetails.Value.length;
 
-                    var isTrailer = IsBitSet(headerDetails.Value.compressed, 7);
+                    var isTrailer = IsBitSet(headerDetails.Value.compressed, pos: 7);
                     if (isTrailer)
                     {
                         return await ParseTrailer();

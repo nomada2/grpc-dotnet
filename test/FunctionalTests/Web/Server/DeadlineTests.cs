@@ -49,33 +49,69 @@ namespace Grpc.AspNetCore.FunctionalTests.Web.Server
             {
                 while (!context.CancellationToken.IsCancellationRequested)
                 {
-                    await Task.Delay(50);
+                    await Task.Delay(10);
                 }
+
+                await Task.Delay(50);
 
                 return new HelloReply();
             }
 
+            SetExpectedErrorsFilter(writeContext =>
+            {
+                if (writeContext.LoggerName == TestConstants.ServerCallHandlerTestName)
+                {
+                    // Deadline happened before write
+                    if (writeContext.EventId.Name == "ErrorExecutingServiceMethod" &&
+                        writeContext.State.ToString() == "Error when executing service method 'WriteUntilError'." &&
+                        writeContext.Exception!.Message == "Cannot write message after request is complete.")
+                    {
+                        return true;
+                    }
+
+                    // Deadline happened during write (error raised from pipeline writer)
+                    if (writeContext.Exception is InvalidOperationException &&
+                        writeContext.Exception.Message == "Writing is not allowed after writer was completed.")
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            });
+
             var method = Fixture.DynamicGrpc.AddUnaryMethod<HelloRequest, HelloReply>(WaitUntilDeadline, nameof(WaitUntilDeadline));
 
-            var requestMessage = new HelloRequest
-            {
-                Name = "World"
-            };
-
-            var requestStream = new MemoryStream();
-            MessageHelpers.WriteMessage(requestStream, requestMessage);
-
-            var httpRequest = GrpcHttpHelper.Create(method.FullName);
-            httpRequest.Headers.Add(GrpcProtocolConstants.TimeoutHeader, "200m");
-            httpRequest.Content = new GrpcStreamContent(requestStream);
-
-            // Act
             var grpcWebClient = CreateGrpcWebClient();
-            var response = await grpcWebClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead).DefaultTimeout();
 
-            // Assert
-            response.AssertIsSuccessfulGrpcRequest();
-            response.AssertTrailerStatus(StatusCode.DeadlineExceeded, "Deadline Exceeded");
+            for (int i = 0; i < 50; i++)
+            {
+                var requestMessage = new HelloRequest
+                {
+                    Name = "World"
+                };
+
+                var requestStream = new MemoryStream();
+                MessageHelpers.WriteMessage(requestStream, requestMessage);
+
+                var httpRequest = GrpcHttpHelper.Create(method.FullName);
+                httpRequest.Headers.Add(GrpcProtocolConstants.TimeoutHeader, "50m");
+                httpRequest.Content = new GrpcStreamContent(requestStream);
+
+                try
+                {
+                    // Act
+                    var response = await grpcWebClient.SendAsync(httpRequest, HttpCompletionOption.ResponseHeadersRead).DefaultTimeout();
+
+                    // Assert
+                    response.AssertIsSuccessfulGrpcRequest();
+                    response.AssertTrailerStatus(StatusCode.DeadlineExceeded, "Deadline Exceeded");
+                }
+                catch (HttpRequestException ex) when (ex.InnerException?.Message == "The response ended prematurely.")
+                {
+                    // There seems to be some flakyness in HTTP/1 and CompleteAsync. Will sometimes never return data.
+                }
+            }
         }
 
         [Test]
