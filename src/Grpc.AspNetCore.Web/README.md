@@ -6,8 +6,8 @@ This is an experimental project. If you have issues or suggestions for features,
 
 [gRPC-Web](https://grpc.io/blog/state-of-grpc-web/) allows gRPC to be used over HTTP/1.1 connections. gRPC-Web enables using gRPC in new scenarios:
 
-- JavaScript browser applications can call gRPC services using the [JS gRPC-Web client](https://github.com/grpc/grpc-web).
-- Blazor WebAssembly applications can call gRPC services using the .NET Core client.
+- JavaScript browser applications can call gRPC services using the [gRPC-Web JavaScript client](https://github.com/grpc/grpc-web).
+- Blazor WebAssembly applications can call gRPC services using the .NET Core gRPC client.
 - gRPC services can be used in environments that don't have complete support for HTTP/2.
 - gRPC can be used with HTTP/1.1 only technologies, e.g. Windows authentication.
 
@@ -51,7 +51,8 @@ app.UseEndpoints(endpoints =>
 Grpc.Net.Client.Web provides a HttpClient delegating handler that configures the .NET Core gRPC client to send gRPC-Web calls.
 
 ```csharp
-var httpClient = new HttpClient(new GrpcWebHandler(GrpcWebMode.GrpcWebText));
+var httpClientHandler = new HttpClientHandler();
+var httpClient = new HttpClient(new GrpcWebHandler(GrpcWebMode.GrpcWebText, httpClientHandler));
 
 var channel = GrpcChannel.ForAddress("https://localhost:5001", new GrpcChannelOptions
     {

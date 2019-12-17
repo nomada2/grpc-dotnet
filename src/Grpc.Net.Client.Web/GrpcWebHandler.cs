@@ -51,8 +51,35 @@ namespace Grpc.Net.Client.Web
         /// Creates a new instance of <see cref="GrpcWebHandler"/>.
         /// </summary>
         /// <param name="mode">The gRPC-Web mode to use when making gRPC-Web calls.</param>
+        /// <param name="innerHandler">The inner handler which is responsible for processing the HTTP response messages.</param>
+        public GrpcWebHandler(GrpcWebMode mode, HttpMessageHandler innerHandler) : base(innerHandler)
+        {
+            _mode = mode;
+        }
+
+        /// <summary>
+        /// Creates a new instance of <see cref="GrpcWebHandler"/>.
+        /// </summary>
+        /// <param name="mode">The gRPC-Web mode to use when making gRPC-Web calls.</param>
         /// <param name="httpVersion">The HTTP version to used when making gRPC-Web calls.</param>
         public GrpcWebHandler(GrpcWebMode mode, Version httpVersion)
+        {
+            if (httpVersion == null)
+            {
+                throw new ArgumentNullException(nameof(httpVersion));
+            }
+
+            _mode = mode;
+            _httpVersion = httpVersion;
+        }
+
+        /// <summary>
+        /// Creates a new instance of <see cref="GrpcWebHandler"/>.
+        /// </summary>
+        /// <param name="mode">The gRPC-Web mode to use when making gRPC-Web calls.</param>
+        /// <param name="httpVersion">The HTTP version to used when making gRPC-Web calls.</param>
+        /// <param name="innerHandler">The inner handler which is responsible for processing the HTTP response messages.</param>
+        public GrpcWebHandler(GrpcWebMode mode, Version httpVersion, HttpMessageHandler innerHandler) : base(innerHandler)
         {
             if (httpVersion == null)
             {
