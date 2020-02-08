@@ -67,6 +67,97 @@ namespace Grpc.Net.Client.Tests.Web
             }
         }
 
+        private class SegmentedMemoryStream : Stream
+        {
+            private readonly byte[][] _segments;
+            private readonly int _maxReadLength;
+
+            private int _segmentIndex;
+            private MemoryStream _currentInnerStream;
+
+            public override bool CanRead => true;
+            public override bool CanSeek => false;
+            public override bool CanWrite => false;
+            public override long Length => throw new NotImplementedException();
+            public override long Position
+            {
+                get => throw new NotImplementedException();
+                set => throw new NotImplementedException();
+            }
+
+            public SegmentedMemoryStream(byte[][] segments, int maxReadLength)
+            {
+                _segments = segments;
+                _maxReadLength = maxReadLength;
+                _currentInnerStream = CreateInnerStream();
+            }
+
+            public override ValueTask<int> ReadAsync(Memory<byte> destination, CancellationToken cancellationToken = default)
+            {
+                var resolvedDestination = destination.Slice(0, Math.Min(_maxReadLength, destination.Length));
+                return ReadAsyncCore(resolvedDestination);
+            }
+
+            private async ValueTask<int> ReadAsyncCore(Memory<byte> destination)
+            {
+                do
+                {
+                    var count = await _currentInnerStream.ReadAsync(destination);
+                    if (count > 0)
+                    {
+                        return count;
+                    }
+
+                    _segmentIndex++;
+                    if (_segmentIndex >= _segments.Length)
+                    {
+                        return 0;
+                    }
+
+                    _currentInnerStream = CreateInnerStream();
+                }
+                while (true);
+            }
+
+            private MemoryStream CreateInnerStream()
+            {
+                try
+                {
+                    return new MemoryStream(_segments[_segmentIndex]);
+                }
+                catch (Exception ex)
+                {
+
+                    throw ex;
+                }
+            }
+
+            public override void Flush()
+            {
+                throw new NotImplementedException();
+            }
+
+            public override int Read(byte[] buffer, int offset, int count)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override long Seek(long offset, SeekOrigin origin)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override void SetLength(long value)
+            {
+                throw new NotImplementedException();
+            }
+
+            public override void Write(byte[] buffer, int offset, int count)
+            {
+                throw new NotImplementedException();
+            }
+        }
+
         private class LimitedReadMemoryStream : MemoryStream
         {
             private readonly int _maxReadLength;
@@ -111,6 +202,47 @@ namespace Grpc.Net.Client.Tests.Web
             var resolvedData = data.AsSpan(0, bytesWritten).ToArray();
 
             CollectionAssert.AreEqual(expected, resolvedData);
+        }
+
+        [Test]
+        public async Task ReadAsync_Randomizer()
+        {
+            for (int i = 0; i < 100000; i++)
+            {
+                var segments = Base64RequestStreamTests.BuildSegments();
+                var base64Segments = new byte[segments.Length][];
+                for (var j = 0; j < segments.Length; j++)
+                {
+                    base64Segments[j] = Encoding.UTF8.GetBytes(Convert.ToBase64String(segments[j]));
+                }
+
+                await NewMethod(i + 1, base64Segments, segments);
+            }
+        }
+
+        public async Task NewMethod(int bufferSize, byte[][] base64Segments, byte[][] segments)
+        {
+            var data = Base64RequestStreamTests.Concat(segments).ToArray();
+
+            // Arrange
+            var ms = new SegmentedMemoryStream(base64Segments, 100000);
+            var base64Stream = new Base64ResponseStream(ms);
+
+            var random = new Random();
+
+            var outputMs = new MemoryStream();
+            while (true)
+            {
+                byte[] buffer = new byte[random.Next(1, bufferSize)];
+                var count = await base64Stream.ReadAsync(buffer);
+                if (count == 0)
+                {
+                    break;
+                }
+                outputMs.Write(buffer.AsSpan(0, count));
+            }
+
+            CollectionAssert.AreEqual(data, outputMs.ToArray());
         }
 
         [Test]

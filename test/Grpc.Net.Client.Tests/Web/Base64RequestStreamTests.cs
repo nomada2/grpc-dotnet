@@ -18,8 +18,10 @@
 
 using System;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Grpc.Net.Client.Web.Internal;
 using NUnit.Framework;
@@ -47,6 +49,73 @@ namespace Grpc.Net.Client.Tests.Web
         }
 
         [Test]
+        public async Task WriteAsync_Randomizer()
+        {
+            for (int i = 0; i < 10000; i++)
+            {
+                var segments = BuildSegments();
+
+                await NewMethod(segments);
+            }
+        }
+
+        public static byte[][] BuildSegments()
+        {
+            var random = new Random();
+
+            var count = random.Next(1, 100);
+            var segments = new byte[count][];
+            for (int i = 0; i < segments.Length; i++)
+            {
+                var segmentLength = random.Next(1, 100);
+                var segment = new byte[segmentLength];
+                for (var j = 0; j < segment.Length; j++)
+                {
+                    segment[j] = (byte)j;
+                }
+
+                segments[i] = segment;
+            }
+
+            return segments;
+        }
+
+        private static async Task NewMethod(byte[][] segments)
+        {
+            // Arrange
+            var ms = new MemoryStream();
+            var gprcWebStream = new Base64RequestStream(ms);
+
+            var data = Concat(segments).ToArray();
+
+            // Act
+            foreach (var segment in segments)
+            {
+                await gprcWebStream.WriteAsync(segment);
+            }
+
+            await gprcWebStream.FlushAsync(CancellationToken.None);
+
+            // Assert
+            var base64 = Encoding.UTF8.GetString(ms.ToArray());
+            CollectionAssert.AreEqual(data, Convert.FromBase64String(base64));
+        }
+
+        public static T[] Concat<T>(params T[][] arrays)
+        {
+            // return (from array in arrays from arr in array select arr).ToArray();
+
+            var result = new T[arrays.Sum(a => a.Length)];
+            int offset = 0;
+            for (int x = 0; x < arrays.Length; x++)
+            {
+                arrays[x].CopyTo(result, offset);
+                offset += arrays[x].Length;
+            }
+            return result;
+        }
+
+        [Test]
         public async Task WriteAsync_MultipleSingleBytes_Written()
         {
             // Arrange
@@ -64,10 +133,6 @@ namespace Grpc.Net.Client.Tests.Web
             // Assert
             var base64 = Encoding.UTF8.GetString(ms.ToArray());
             CollectionAssert.AreEqual(data, Convert.FromBase64String(base64));
-
-            HttpRequestMessage m = new HttpRequestMessage();
-            HttpResponseMessage mm = new HttpResponseMessage();
-            mm.TrailingHeaders.Add("test", "value");
         }
 
         [Test]
