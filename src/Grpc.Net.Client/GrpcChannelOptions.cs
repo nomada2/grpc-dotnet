@@ -33,6 +33,7 @@ namespace Grpc.Net.Client
         /// <summary>
         /// Gets or sets the credentials for the channel. This setting is used to set <see cref="CallCredentials"/> for
         /// a channel. Connection transport layer security (TLS) is determined by the address used to create the channel.
+        /// The default value is null.
         /// </summary>
         /// <remarks>
         /// <para>
@@ -49,26 +50,28 @@ namespace Grpc.Net.Client
 
         /// <summary>
         /// Gets or sets the maximum message size in bytes that can be sent from the client.
+        /// When set to null, the message size is unlimited. The default value is null.
         /// </summary>
         public int? MaxSendMessageSize { get; set; }
 
         /// <summary>
         /// Gets or sets the maximum message size in bytes that can be received by the client.
+        /// When set to null, the message size is unlimited. The default value is 4 MB.
         /// </summary>
         public int? MaxReceiveMessageSize { get; set; }
 
         /// <summary>
-        /// Gets or sets a collection of compression providers.
+        /// Gets or sets a collection of compression providers. The default value is null.
         /// </summary>
         public IList<ICompressionProvider>? CompressionProviders { get; set; }
 
         /// <summary>
-        /// Gets or sets the logger factory used by the channel.
+        /// Gets or sets the logger factory used by the channel. The default value is null.
         /// </summary>
         public ILoggerFactory? LoggerFactory { get; set; }
 
         /// <summary>
-        /// Gets or sets the <see cref="HttpClient"/> used by the channel.
+        /// Gets or sets the <see cref="HttpClient"/> used by the channel. The default value is null.
         /// </summary>
         /// <remarks>
         /// By default a <see cref="System.Net.Http.HttpClient"/> specified here will not be disposed with the channel.
