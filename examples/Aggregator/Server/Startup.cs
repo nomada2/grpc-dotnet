@@ -48,11 +48,12 @@ namespace Server
 
             if (_configuration.GetValue<bool>(EnableOpenTelemetryKey))
             {
-                services.AddOpenTelemetry(telemetry =>
+                services.AddOpenTelemetrySdk(telemetry =>
                 {
-                    telemetry.UseZipkin(o => o.ServiceName = "aggregator");
-                    telemetry.AddDependencyCollector();
-                    telemetry.AddRequestCollector();
+                    telemetry.UseZipkinActivityExporter(o => o.ServiceName = "aggregator");
+                    telemetry.AddGrpcClientDependencyInstrumentation();
+                    telemetry.AddHttpClientDependencyInstrumentation();
+                    telemetry.AddRequestInstrumentation();
                 });
             }
 
